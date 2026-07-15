@@ -59,6 +59,9 @@ public struct ClaudeCodeAdapter: AgentAdapter {
               let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
         var cost = 0.0, totalOut = 0, curCtx = 0, maxCtx = 0
         var model = "claude"
+        // Claude Code writes one JSONL line per assistant content block, each repeating
+        // the same message id and an identical usage object — count each API response once.
+        var seenMessageIDs = Set<String>()
         for line in text.split(separator: "\n") {
             guard let d = line.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
@@ -69,10 +72,15 @@ public struct ClaudeCodeAdapter: AgentAdapter {
             let cw = usage["cache_creation_input_tokens"] as? Int ?? 0
             let cr = usage["cache_read_input_tokens"] as? Int ?? 0
             let out = usage["output_tokens"] as? Int ?? 0
-            let r = rates(for: model)
-            cost += Double(inp) / 1e6 * r.input + Double(cw) / 1e6 * r.cacheWrite
-                  + Double(cr) / 1e6 * r.cacheRead + Double(out) / 1e6 * r.output
-            totalOut += out
+            let id = (msg["id"] as? String) ?? (obj["requestId"] as? String)
+            let isDuplicate = id.map { !seenMessageIDs.insert($0).inserted } ?? false
+            if !isDuplicate {
+                let r = rates(for: model)
+                cost += Double(inp) / 1e6 * r.input + Double(cw) / 1e6 * r.cacheWrite
+                      + Double(cr) / 1e6 * r.cacheRead + Double(out) / 1e6 * r.output
+                totalOut += out
+            }
+            // Duplicates carry identical values, so the context window is safe to update.
             let ctx = inp + cw + cr + out
             if ctx > 0 { curCtx = ctx }
             maxCtx = max(maxCtx, ctx)
@@ -81,6 +89,10 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         let limit = maxCtx > 200_000 ? 1_000_000 : 200_000
         return AgentUsage(contextTokens: curCtx, contextLimit: limit, outputTokens: totalOut, costUSD: cost)
     }
+
+    /// The tools that write to a file on disk. Read-only tools (Read, Grep, Glob, LS)
+    /// also carry a path but must NOT be classified as ``TimelineEvent/Kind/fileEdit``.
+    private let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
 
     // MARK: - Activity timeline
 
@@ -115,7 +127,7 @@ public struct ClaudeCodeAdapter: AgentAdapter {
                         let name = block["name"] as? String ?? "tool"
                         let input = block["input"] as? [String: Any] ?? [:]
                         let (detail, path) = toolDetail(input)
-                        events.append(TimelineEvent(kind: path != nil ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts))
+                        events.append(TimelineEvent(kind: editTools.contains(name) ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts))
                     default: break
                     }
                 }
@@ -131,7 +143,6 @@ public struct ClaudeCodeAdapter: AgentAdapter {
               let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
         var edited = Set<String>()
         var todos: [(String, String)] = []
-        let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
         for line in text.split(separator: "\n") {
             guard let d = line.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
@@ -141,7 +152,9 @@ public struct ClaudeCodeAdapter: AgentAdapter {
             for block in arr where block["type"] as? String == "tool_use" {
                 let name = block["name"] as? String ?? ""
                 let input = block["input"] as? [String: Any] ?? [:]
-                if editTools.contains(name), let fp = input["file_path"] as? String { edited.insert(fp) }
+                // NotebookEdit's parameter is notebook_path, not file_path.
+                if editTools.contains(name),
+                   let fp = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) { edited.insert(fp) }
                 if name == "TodoWrite", let ts = input["todos"] as? [[String: Any]] {
                     todos = ts.compactMap { t in
                         guard let c = t["content"] as? String else { return nil }
@@ -157,6 +170,7 @@ public struct ClaudeCodeAdapter: AgentAdapter {
 
     private func toolDetail(_ input: [String: Any]) -> (String, String?) {
         if let fp = input["file_path"] as? String { return (shortPath(fp), fp) }
+        if let np = input["notebook_path"] as? String { return (shortPath(np), np) }
         if let p = input["path"] as? String { return (shortPath(p), p) }
         if let cmd = input["command"] as? String { return (firstLine(cmd, 120), nil) }
         if let pat = input["pattern"] as? String { return (pat, nil) }
@@ -172,8 +186,30 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         let parts = p.split(separator: "/")
         return parts.count <= 2 ? p : ".../" + parts.suffix(2).joined(separator: "/")
     }
+    /// ISO-8601 with fractional seconds ("2026-07-09T10:07:12.000Z") — the form
+    /// Claude Code writes. Falls back to `isoPlain` for whole-second timestamps.
+    private static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let isoPlain = ISO8601DateFormatter()
+    private static let localHHMM: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    /// Transcript timestamps are UTC Zulu — convert to the viewer's local clock,
+    /// falling back to the raw UTC HH:MM slice only if the string is unparseable.
     private func shortTime(_ iso: String?) -> String {
-        guard let iso, let tPart = iso.split(separator: "T").dropFirst().first else { return "" }
+        guard let iso else { return "" }
+        if let date = Self.isoFractional.date(from: iso) ?? Self.isoPlain.date(from: iso) {
+            return Self.localHHMM.string(from: date)
+        }
+        guard let tPart = iso.split(separator: "T").dropFirst().first else { return "" }
         return String(tPart.prefix(5))
     }
 }

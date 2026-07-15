@@ -34,8 +34,24 @@ final class AgentSessionTests: XCTestCase {
 
     override func setUpWithError() throws {
         try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+        try write(transcript)
+    }
+
+    // Overwrites this test's session transcript (each test method has its own root/dir).
+    private func write(_ transcript: String) throws {
         let file = projectDir.appendingPathComponent("session.jsonl")
         try transcript.write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    // The local-clock HH:MM the adapter is expected to render for a UTC instant.
+    private func localHHMM(_ iso: String) -> String {
+        let isoF = ISO8601DateFormatter()
+        isoF.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "HH:mm"
+        return f.string(from: isoF.date(from: iso)!)
     }
 
     override func tearDownWithError() throws {
@@ -71,7 +87,7 @@ final class AgentSessionTests: XCTestCase {
         XCTAssertEqual(events[0].title, "You")
         XCTAssertEqual(events[0].detail, "Add a cron parser")
         XCTAssertNil(events[0].filePath)
-        XCTAssertEqual(events[0].timestamp, "10:07")
+        XCTAssertEqual(events[0].timestamp, localHHMM("2026-07-09T10:07:12.000Z"))
 
         // User content given as an array of text blocks.
         XCTAssertEqual(events[1].kind, .userPrompt)
@@ -98,6 +114,50 @@ final class AgentSessionTests: XCTestCase {
         XCTAssertEqual(events[5].title, "TodoWrite")
     }
 
+    // Read-only tools that carry a path (Read, Grep, Glob, LS) must stay .toolUse —
+    // only Edit/Write/MultiEdit/NotebookEdit are file edits.
+    func testReadOnlyToolsWithPathsAreNotFileEdits() throws {
+        try write("""
+        {"type":"assistant","timestamp":"2026-07-09T10:08:00.000Z","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/proj/App.swift"}},{"type":"tool_use","name":"Grep","input":{"pattern":"foo","path":"/proj/Sources"}},{"type":"tool_use","name":"Write","input":{"file_path":"/proj/New.swift"}}]}}
+        """)
+        let events = ClaudeCodeAdapter().events(for: root)
+        XCTAssertEqual(events.count, 3)
+
+        XCTAssertEqual(events[0].kind, .toolUse)
+        XCTAssertEqual(events[0].title, "Read")
+        XCTAssertEqual(events[0].filePath, "/proj/App.swift")   // still navigable
+
+        XCTAssertEqual(events[1].kind, .toolUse)
+        XCTAssertEqual(events[1].title, "Grep")
+        XCTAssertEqual(events[1].filePath, "/proj/Sources")
+
+        XCTAssertEqual(events[2].kind, .fileEdit)
+        XCTAssertEqual(events[2].title, "Write")
+    }
+
+    // Timestamps in the transcript are UTC Zulu; the timeline must show local time.
+    func testTimestampsAreConvertedToLocalTime() {
+        let events = ClaudeCodeAdapter().events(for: root)
+        XCTAssertEqual(events[3].timestamp, localHHMM("2026-07-09T10:08:00.000Z"))
+    }
+
+    // NotebookEdit's path parameter is notebook_path, not file_path — it must still
+    // count as a file edit with a navigable path in both events() and summary().
+    func testNotebookEditUsesNotebookPath() throws {
+        try write("""
+        {"type":"assistant","timestamp":"2026-07-09T10:08:00.000Z","message":{"content":[{"type":"tool_use","name":"NotebookEdit","input":{"notebook_path":"/proj/analysis.ipynb","cell_id":"c1","new_source":"x = 1"}}]}}
+        """)
+        let adapter = ClaudeCodeAdapter()
+
+        let events = adapter.events(for: root)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0].kind, .fileEdit)
+        XCTAssertEqual(events[0].detail, "/proj/analysis.ipynb")   // ≤2 components: kept whole
+        XCTAssertEqual(events[0].filePath, "/proj/analysis.ipynb")
+
+        XCTAssertEqual(adapter.summary(for: root)?.editedFiles, ["/proj/analysis.ipynb"])
+    }
+
     // MARK: - Telemetry
 
     func testUsageAggregation() {
@@ -113,6 +173,26 @@ final class AgentSessionTests: XCTestCase {
 
         // Sonnet (default) rates: input 3, cacheWrite 3.75, cacheRead 0.3, output 15 per 1e6.
         let expected = 0.009435 + 0.0123
+        XCTAssertEqual(u.costUSD, expected, accuracy: 1e-9)
+    }
+
+    // Claude Code writes one JSONL line per assistant content block, each repeating the
+    // same message.id and an identical usage object — the response must be counted once.
+    func testUsageDeduplicatesRepeatedMessageIDs() throws {
+        try write("""
+        {"type":"assistant","timestamp":"2026-07-09T10:08:00.000Z","requestId":"req_1","message":{"id":"msg_1","model":"claude-sonnet-4","usage":{"input_tokens":3000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":200},"content":[{"type":"text","text":"Editing now."}]}}
+        {"type":"assistant","timestamp":"2026-07-09T10:08:01.000Z","requestId":"req_1","message":{"id":"msg_1","model":"claude-sonnet-4","usage":{"input_tokens":3000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":200},"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/proj/App.swift"}}]}}
+        {"type":"assistant","timestamp":"2026-07-09T10:09:00.000Z","requestId":"req_2","message":{"id":"msg_2","model":"claude-sonnet-4","usage":{"input_tokens":4000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100},"content":[{"type":"text","text":"Done."}]}}
+        """)
+        let usage = ClaudeCodeAdapter().usage(for: root)
+        XCTAssertNotNil(usage)
+        guard let u = usage else { return }
+
+        XCTAssertEqual(u.outputTokens, 300)            // 200 (once) + 100, not 200 + 200 + 100
+        XCTAssertEqual(u.contextTokens, 4100)          // last usage line: 4000 + 100
+
+        // msg_1 counted once (3000 in, 200 out) + msg_2 (4000 in, 100 out) at Sonnet rates.
+        let expected = (3000.0 / 1e6 * 3 + 200.0 / 1e6 * 15) + (4000.0 / 1e6 * 3 + 100.0 / 1e6 * 15)
         XCTAssertEqual(u.costUSD, expected, accuracy: 1e-9)
     }
 
