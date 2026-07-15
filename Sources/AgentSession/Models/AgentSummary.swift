@@ -19,6 +19,7 @@ public struct AgentSummary {
     /// The agent's current to-do items as `(text, status)` pairs.
     public let todos: [(text: String, status: String)]
 
+    /// Creates a session roll-up.
     public init(editedFiles: Set<String>, todos: [(text: String, status: String)]) {
         self.editedFiles = editedFiles
         self.todos = todos

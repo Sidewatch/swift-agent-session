@@ -47,6 +47,7 @@ public struct TimelineEvent {
     /// A short `HH:MM` timestamp, or `""` when unknown.
     public let timestamp: String
 
+    /// Creates a timeline entry.
     public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String) {
         self.kind = kind
         self.title = title

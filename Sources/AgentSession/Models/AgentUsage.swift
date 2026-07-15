@@ -30,6 +30,7 @@ public struct AgentUsage {
         contextLimit > 0 ? min(100, Int(Double(contextTokens) / Double(contextLimit) * 100)) : 0
     }
 
+    /// Creates a telemetry snapshot.
     public init(contextTokens: Int, contextLimit: Int, outputTokens: Int, costUSD: Double) {
         self.contextTokens = contextTokens
         self.contextLimit = contextLimit

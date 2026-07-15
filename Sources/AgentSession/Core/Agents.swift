@@ -25,6 +25,12 @@ public enum Agents {
     /// The first adapter that has a session for `root` (first match wins), or
     /// `nil` when no known agent has one.
     public static func active(for root: URL) -> AgentAdapter? {
-        all.first { $0.hasSession(for: root) }
+        active(for: root, in: all)
+    }
+
+    /// Test seam: the same first-match detection over an explicit adapter list,
+    /// so tests can inject adapters rooted at a temp directory.
+    static func active(for root: URL, in adapters: [AgentAdapter]) -> AgentAdapter? {
+        adapters.first { $0.hasSession(for: root) }
     }
 }

@@ -14,24 +14,41 @@ import Foundation
 /// →dashes>/<session-id>.jsonl` (read-only) and maps it onto the agent-agnostic
 /// model. The first, reference ``AgentAdapter``.
 public struct ClaudeCodeAdapter: AgentAdapter {
+
+    /// `"Claude Code"`.
     public let name = "Claude Code"
 
-    public init() {}
+    /// The `~/.claude/projects` container the adapter scans. Internal seam so
+    /// tests can point the adapter at a temp directory instead of the real home.
+    let projectsRoot: URL
 
+    /// Creates an adapter that reads the real `~/.claude/projects` container.
+    public init() {
+        self.projectsRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects", isDirectory: true)
+    }
+
+    /// Test seam: read transcripts from an arbitrary projects container.
+    init(projectsRoot: URL) { self.projectsRoot = projectsRoot }
+
+    /// Whether Claude Code has recorded at least one `.jsonl` transcript for `root`.
     public func hasSession(for root: URL) -> Bool { latestSessionFile(for: root) != nil }
 
     // MARK: - Locating the transcript
 
+    /// The `~/.claude/projects/<encoded-cwd>` directory for `root`, or `nil` when
+    /// Claude Code has never run there.
     func projectDir(for root: URL) -> URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
         // Claude Code uses an ASCII-only `[^a-zA-Z0-9]→-` rule; Character.isLetter is
         // Unicode-aware and would keep accented/non-Latin chars, diverging on those paths.
         let encoded = String(root.path.map { ($0.isASCII && ($0.isLetter || $0.isNumber)) ? $0 : "-" })
-        let dir = home.appendingPathComponent(".claude/projects/\(encoded)", isDirectory: true)
+        let dir = projectsRoot.appendingPathComponent(encoded, isDirectory: true)
         var isDir: ObjCBool = false
         return (FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue) ? dir : nil
     }
 
+    /// The most recently modified `.jsonl` transcript in the project directory —
+    /// "the current session" — or `nil` when there is none.
     func latestSessionFile(for root: URL) -> URL? {
         guard let dir = projectDir(for: root),
               let files = try? FileManager.default.contentsOfDirectory(
@@ -40,13 +57,17 @@ public struct ClaudeCodeAdapter: AgentAdapter {
             .max { (mod($0) ?? .distantPast) < (mod($1) ?? .distantPast) }
     }
 
+    /// The file's content-modification date, or `nil` when unreadable.
     private func mod(_ u: URL) -> Date? {
         (try? u.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
 
     // MARK: - Telemetry
 
+    /// Per-million-token USD prices for one model family.
     private struct Rates { let input, cacheWrite, cacheRead, output: Double }
+
+    /// Approximate list prices by model-name substring (opus / haiku / sonnet default).
     private func rates(for model: String) -> Rates {
         let m = model.lowercased()
         if m.contains("opus")  { return Rates(input: 15, cacheWrite: 18.75, cacheRead: 1.5, output: 75) }
@@ -54,6 +75,13 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         return Rates(input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15)
     }
 
+    /// Token/cost telemetry aggregated over the latest transcript, or `nil` when
+    /// there is no transcript or it carries no usage records.
+    ///
+    /// Cost is estimated from approximate per-model list prices; duplicate JSONL
+    /// lines for the same API response (same `message.id`/`requestId`) count once.
+    /// - Note: Reads the whole transcript synchronously — call off the main thread
+    ///   for large sessions.
     public func usage(for root: URL) -> AgentUsage? {
         guard let file = latestSessionFile(for: root),
               let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
@@ -96,6 +124,10 @@ public struct ClaudeCodeAdapter: AgentAdapter {
 
     // MARK: - Activity timeline
 
+    /// The activity timeline parsed from the latest transcript, oldest first,
+    /// capped to the most recent 300 events. Malformed lines are skipped.
+    /// - Note: Reads the whole transcript synchronously — call off the main thread
+    ///   for large sessions.
     public func events(for root: URL) -> [TimelineEvent] {
         guard let file = latestSessionFile(for: root),
               let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
@@ -138,6 +170,10 @@ public struct ClaudeCodeAdapter: AgentAdapter {
 
     // MARK: - Plan vs actual
 
+    /// The edited-files set and the most recent to-do list from the latest
+    /// transcript, or `nil` when there is no transcript at all.
+    /// - Note: Reads the whole transcript synchronously — call off the main thread
+    ///   for large sessions.
     public func summary(for root: URL) -> AgentSummary? {
         guard let file = latestSessionFile(for: root),
               let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
@@ -155,9 +191,12 @@ public struct ClaudeCodeAdapter: AgentAdapter {
                 // NotebookEdit's parameter is notebook_path, not file_path.
                 if editTools.contains(name),
                    let fp = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) { edited.insert(fp) }
-                if name == "TodoWrite", let ts = input["todos"] as? [[String: Any]] {
-                    todos = ts.compactMap { t in
-                        guard let c = t["content"] as? String else { return nil }
+                // Tolerate a heterogeneous todos array: one malformed element must
+                // not drop the valid ones (cast per element, not the whole array).
+                if name == "TodoWrite", let ts = input["todos"] as? [Any] {
+                    todos = ts.compactMap { item in
+                        guard let t = item as? [String: Any],
+                              let c = t["content"] as? String else { return nil }
                         return (c, (t["status"] as? String) ?? "pending")
                     }
                 }
@@ -168,6 +207,8 @@ public struct ClaudeCodeAdapter: AgentAdapter {
 
     // MARK: - Helpers
 
+    /// Derives a one-line detail string (and a navigable path, when the input
+    /// carries one) from a tool call's input dictionary.
     private func toolDetail(_ input: [String: Any]) -> (String, String?) {
         if let fp = input["file_path"] as? String { return (shortPath(fp), fp) }
         if let np = input["notebook_path"] as? String { return (shortPath(np), np) }
@@ -177,11 +218,13 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         if let q = input["query"] as? String { return (firstLine(q, 120), nil) }
         return ("", nil)
     }
+    /// The trimmed first line of `s`, truncated to `max` characters with an ellipsis.
     private func firstLine(_ s: String, _ max: Int = 160) -> String {
         let line = s.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? s
         let t = line.trimmingCharacters(in: .whitespaces)
         return t.count > max ? String(t.prefix(max)) + "…" : t
     }
+    /// Compresses an absolute path to its last two components (`.../Dir/File.swift`).
     private func shortPath(_ p: String) -> String {
         let parts = p.split(separator: "/")
         return parts.count <= 2 ? p : ".../" + parts.suffix(2).joined(separator: "/")
@@ -193,7 +236,10 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
+    /// Whole-second ISO-8601 fallback ("2026-07-09T10:07:12Z").
     private static let isoPlain = ISO8601DateFormatter()
+
+    /// Renders a `Date` as `HH:mm` on the viewer's local clock.
     private static let localHHMM: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")

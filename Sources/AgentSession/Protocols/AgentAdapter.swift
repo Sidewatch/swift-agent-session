@@ -15,6 +15,9 @@ import Foundation
 /// Implement one adapter per agent to map its native session format onto the
 /// shared ``TimelineEvent`` / ``AgentUsage`` / ``AgentSummary`` model; every
 /// other consumer then stays agent-agnostic.
+///
+/// - Note: Adapters read transcripts synchronously from disk — call off the main
+///   thread when sessions may be large.
 public protocol AgentAdapter {
 
     /// A human-readable name for the agent, e.g. `"Claude Code"`.
