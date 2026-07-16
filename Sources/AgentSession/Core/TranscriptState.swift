@@ -1,0 +1,256 @@
+//
+//  TranscriptState.swift
+//  SwiftAgentSession
+//
+//  The accumulated parse state for one Claude Code JSONL transcript: per-line
+//  ingestion plus materialization of the usage / events / summary results.
+//
+//  Created by David Sherlock on 7/16/26.
+//
+
+import Foundation
+
+/// Accumulated parse state for one Claude Code JSONL transcript.
+///
+/// ``TranscriptCache`` feeds this struct one *complete* transcript line at a
+/// time via ``ingest(lineData:)``; the struct keeps the running usage
+/// accumulators, the bounded events buffer, and the summary roll-up, and
+/// materializes the public model values on demand. Ingesting lines A then B
+/// leaves exactly the same state as parsing a file containing A + B from
+/// scratch — that equivalence is what lets the cache serve full-fidelity
+/// results from only the appended bytes of a growing transcript.
+///
+/// Value semantics are deliberate: the cache copies the durable state and
+/// tentatively ingests an unterminated trailing line into the *copy*, so the
+/// served snapshot matches a full re-parse of the file as it stands right now
+/// without contaminating the accumulators future polls build on.
+struct TranscriptState {
+
+    // MARK: - Usage accumulators
+
+    /// Estimated spend so far, in US dollars.
+    private var cost = 0.0
+
+    /// Total output tokens across deduplicated API responses.
+    private var totalOut = 0
+
+    /// The most recent non-zero context window (input + cache + output tokens).
+    private var curCtx = 0
+
+    /// The largest context window seen (drives the 200k-vs-1M limit guess).
+    private var maxCtx = 0
+
+    /// The most recent real model name seen (drives pricing).
+    private var model = "claude"
+
+    /// `message.id` / `requestId` values already priced. Claude Code writes one
+    /// JSONL line per assistant content block, each repeating the same message
+    /// id and an identical usage object — each API response must count once.
+    private var seenMessageIDs = Set<String>()
+
+    // MARK: - Events buffer
+
+    /// The public events cap: only the most recent 300 events are reported.
+    private static let eventCap = 300
+
+    /// The activity timeline, oldest first, trimmed live to ``eventCap`` so the
+    /// buffer stays bounded no matter how long the session runs. Trimming as we
+    /// go is equivalent to parsing everything and taking `suffix(300)`.
+    private var events: [TimelineEvent] = []
+
+    // MARK: - Summary accumulators
+
+    /// Absolute paths of every file an edit tool wrote to.
+    private var edited = Set<String>()
+
+    /// The most recent `TodoWrite` list, as `(text, status)` pairs (last wins).
+    private var todos: [(String, String)] = []
+
+    // MARK: - Ingestion
+
+    /// Folds one complete transcript line into the state.
+    ///
+    /// The line is parsed as raw JSON bytes (JSONL is UTF-8 by spec); malformed
+    /// or non-object lines are skipped, never fatal. All three result streams
+    /// (usage / events / summary) are updated from the single parse.
+    mutating func ingest(lineData: Data) {
+        guard let obj = (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any] else { return }
+        ingestUsage(obj)
+        ingestEvent(obj)
+        ingestSummary(obj)
+    }
+
+    /// Updates the token/cost accumulators from one parsed line.
+    private mutating func ingestUsage(_ obj: [String: Any]) {
+        guard let msg = obj["message"] as? [String: Any],
+              let usage = msg["usage"] as? [String: Any] else { return }
+        if let m = msg["model"] as? String, !m.isEmpty, m != "<synthetic>" { model = m }
+        let inp = usage["input_tokens"] as? Int ?? 0
+        let cw = usage["cache_creation_input_tokens"] as? Int ?? 0
+        let cr = usage["cache_read_input_tokens"] as? Int ?? 0
+        let out = usage["output_tokens"] as? Int ?? 0
+        let id = (msg["id"] as? String) ?? (obj["requestId"] as? String)
+        let isDuplicate = id.map { !seenMessageIDs.insert($0).inserted } ?? false
+        if !isDuplicate {
+            let r = Self.rates(for: model)
+            cost += Double(inp) / 1e6 * r.input + Double(cw) / 1e6 * r.cacheWrite
+                  + Double(cr) / 1e6 * r.cacheRead + Double(out) / 1e6 * r.output
+            totalOut += out
+        }
+        // Duplicates carry identical values, so the context window is safe to update.
+        let ctx = inp + cw + cr + out
+        if ctx > 0 { curCtx = ctx }
+        maxCtx = max(maxCtx, ctx)
+    }
+
+    /// Appends this line's timeline events (if any), keeping the buffer capped.
+    private mutating func ingestEvent(_ obj: [String: Any]) {
+        guard let msg = obj["message"] as? [String: Any] else { return }
+        let type = obj["type"] as? String ?? ""
+        let ts = Self.shortTime(obj["timestamp"] as? String)
+
+        if type == "user" {
+            if let s = msg["content"] as? String, !s.hasPrefix("<") {
+                append(TimelineEvent(kind: .userPrompt, title: "You", detail: Self.firstLine(s), filePath: nil, timestamp: ts))
+            } else if let arr = msg["content"] as? [[String: Any]] {
+                let texts = arr.filter { ($0["type"] as? String) == "text" }.compactMap { $0["text"] as? String }
+                if !texts.isEmpty {
+                    append(TimelineEvent(kind: .userPrompt, title: "You", detail: Self.firstLine(texts.joined(separator: " ")), filePath: nil, timestamp: ts))
+                }
+            }
+        } else if type == "assistant", let arr = msg["content"] as? [[String: Any]] {
+            for block in arr {
+                switch block["type"] as? String {
+                case "text":
+                    if let t = (block["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                        append(TimelineEvent(kind: .assistantText, title: "Claude", detail: Self.firstLine(t), filePath: nil, timestamp: ts))
+                    }
+                case "tool_use":
+                    let name = block["name"] as? String ?? "tool"
+                    let input = block["input"] as? [String: Any] ?? [:]
+                    let (detail, path) = Self.toolDetail(input)
+                    append(TimelineEvent(kind: Self.editTools.contains(name) ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts))
+                default: break
+                }
+            }
+        }
+    }
+
+    /// Appends one event and trims the buffer to the cap.
+    private mutating func append(_ event: TimelineEvent) {
+        events.append(event)
+        if events.count > Self.eventCap { events.removeFirst(events.count - Self.eventCap) }
+    }
+
+    /// Updates the edited-files set and the current to-do list from one line.
+    private mutating func ingestSummary(_ obj: [String: Any]) {
+        guard obj["type"] as? String == "assistant",
+              let msg = obj["message"] as? [String: Any],
+              let arr = msg["content"] as? [[String: Any]] else { return }
+        for block in arr where block["type"] as? String == "tool_use" {
+            let name = block["name"] as? String ?? ""
+            let input = block["input"] as? [String: Any] ?? [:]
+            // NotebookEdit's parameter is notebook_path, not file_path.
+            if Self.editTools.contains(name),
+               let fp = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) { edited.insert(fp) }
+            // Tolerate a heterogeneous todos array: one malformed element must
+            // not drop the valid ones (cast per element, not the whole array).
+            if name == "TodoWrite", let ts = input["todos"] as? [Any] {
+                todos = ts.compactMap { item in
+                    guard let t = item as? [String: Any],
+                          let c = t["content"] as? String else { return nil }
+                    return (c, (t["status"] as? String) ?? "pending")
+                }
+            }
+        }
+    }
+
+    // MARK: - Materialization
+
+    /// The usage telemetry as the public API reports it, or `nil` when the
+    /// transcript carries no usage records at all.
+    var usageResult: AgentUsage? {
+        guard maxCtx > 0 else { return nil }
+        let limit = maxCtx > 200_000 ? 1_000_000 : 200_000
+        return AgentUsage(contextTokens: curCtx, contextLimit: limit, outputTokens: totalOut, costUSD: cost)
+    }
+
+    /// The activity timeline as the public API reports it (last 300, oldest first).
+    var eventsResult: [TimelineEvent] { Array(events.suffix(Self.eventCap)) }
+
+    /// The edited-files / to-dos roll-up as the public API reports it.
+    var summaryResult: AgentSummary { AgentSummary(editedFiles: edited, todos: todos) }
+
+    // MARK: - Static helpers (shared parsing vocabulary)
+
+    /// The tools that write to a file on disk. Read-only tools (Read, Grep, Glob, LS)
+    /// also carry a path but must NOT be classified as ``TimelineEvent/Kind/fileEdit``.
+    private static let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+
+    /// Per-million-token USD prices for one model family.
+    private struct Rates { let input, cacheWrite, cacheRead, output: Double }
+
+    /// Approximate list prices by model-name substring (opus / haiku / sonnet default).
+    private static func rates(for model: String) -> Rates {
+        let m = model.lowercased()
+        if m.contains("opus")  { return Rates(input: 15, cacheWrite: 18.75, cacheRead: 1.5, output: 75) }
+        if m.contains("haiku") { return Rates(input: 0.8, cacheWrite: 1.0, cacheRead: 0.08, output: 4) }
+        return Rates(input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15)
+    }
+
+    /// Derives a one-line detail string (and a navigable path, when the input
+    /// carries one) from a tool call's input dictionary.
+    private static func toolDetail(_ input: [String: Any]) -> (String, String?) {
+        if let fp = input["file_path"] as? String { return (shortPath(fp), fp) }
+        if let np = input["notebook_path"] as? String { return (shortPath(np), np) }
+        if let p = input["path"] as? String { return (shortPath(p), p) }
+        if let cmd = input["command"] as? String { return (firstLine(cmd, 120), nil) }
+        if let pat = input["pattern"] as? String { return (pat, nil) }
+        if let q = input["query"] as? String { return (firstLine(q, 120), nil) }
+        return ("", nil)
+    }
+
+    /// The trimmed first line of `s`, truncated to `max` characters with an ellipsis.
+    private static func firstLine(_ s: String, _ max: Int = 160) -> String {
+        let line = s.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? s
+        let t = line.trimmingCharacters(in: .whitespaces)
+        return t.count > max ? String(t.prefix(max)) + "…" : t
+    }
+
+    /// Compresses an absolute path to its last two components (`.../Dir/File.swift`).
+    private static func shortPath(_ p: String) -> String {
+        let parts = p.split(separator: "/")
+        return parts.count <= 2 ? p : ".../" + parts.suffix(2).joined(separator: "/")
+    }
+
+    /// ISO-8601 with fractional seconds ("2026-07-09T10:07:12.000Z") — the form
+    /// Claude Code writes. Falls back to `isoPlain` for whole-second timestamps.
+    private static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    /// Whole-second ISO-8601 fallback ("2026-07-09T10:07:12Z").
+    private static let isoPlain = ISO8601DateFormatter()
+
+    /// Renders a `Date` as `HH:mm` on the viewer's local clock.
+    private static let localHHMM: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    /// Transcript timestamps are UTC Zulu — convert to the viewer's local clock,
+    /// falling back to the raw UTC HH:MM slice only if the string is unparseable.
+    private static func shortTime(_ iso: String?) -> String {
+        guard let iso else { return "" }
+        if let date = isoFractional.date(from: iso) ?? isoPlain.date(from: iso) {
+            return localHHMM.string(from: date)
+        }
+        guard let tPart = iso.split(separator: "T").dropFirst().first else { return "" }
+        return String(tPart.prefix(5))
+    }
+}
