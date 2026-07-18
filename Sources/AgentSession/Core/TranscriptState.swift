@@ -92,9 +92,7 @@ struct TranscriptState {
         let id = (msg["id"] as? String) ?? (obj["requestId"] as? String)
         let isDuplicate = id.map { !seenMessageIDs.insert($0).inserted } ?? false
         if !isDuplicate {
-            let r = Self.rates(for: model)
-            cost += Double(inp) / 1e6 * r.input + Double(cw) / 1e6 * r.cacheWrite
-                  + Double(cr) / 1e6 * r.cacheRead + Double(out) / 1e6 * r.output
+            cost += ModelPricing.cost(model: model, input: inp, cacheWrite: cw, cacheRead: cr, output: out)
             totalOut += out
         }
         // Duplicates carry identical values, so the context window is safe to update.
@@ -189,16 +187,6 @@ struct TranscriptState {
     /// also carry a path but must NOT be classified as ``TimelineEvent/Kind/fileEdit``.
     private static let editTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
 
-    /// Per-million-token USD prices for one model family.
-    private struct Rates { let input, cacheWrite, cacheRead, output: Double }
-
-    /// Approximate list prices by model-name substring (opus / haiku / sonnet default).
-    private static func rates(for model: String) -> Rates {
-        let m = model.lowercased()
-        if m.contains("opus")  { return Rates(input: 15, cacheWrite: 18.75, cacheRead: 1.5, output: 75) }
-        if m.contains("haiku") { return Rates(input: 0.8, cacheWrite: 1.0, cacheRead: 0.08, output: 4) }
-        return Rates(input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15)
-    }
 
     /// Derives a one-line detail string (and a navigable path, when the input
     /// carries one) from a tool call's input dictionary.
