@@ -129,7 +129,9 @@ struct TranscriptState {
                     let name = block["name"] as? String ?? "tool"
                     let input = block["input"] as? [String: Any] ?? [:]
                     let (detail, path) = Self.toolDetail(input)
-                    append(TimelineEvent(kind: Self.editTools.contains(name) ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts))
+                    let isEdit = Self.editTools.contains(name)
+                    append(TimelineEvent(kind: isEdit ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts,
+                                         anchor: isEdit ? Self.editAnchor(input) : nil))
                 default: break
                 }
             }
@@ -208,6 +210,28 @@ struct TranscriptState {
         if let pat = input["pattern"] as? String { return (pat, nil) }
         if let q = input["query"] as? String { return (firstLine(q, 120), nil) }
         return ("", nil)
+    }
+
+    /// A distinctive line of the text an edit inserts, to locate where the edit landed.
+    /// `Edit` → its `new_string`; `MultiEdit` → the *last* sub-edit's `new_string` (where
+    /// the agent finished); `Write`/`NotebookEdit` → nil (whole-file, no single anchor).
+    /// Returns the first inserted line long enough to be findable (skips braces/blanks).
+    private static func editAnchor(_ input: [String: Any]) -> String? {
+        let source: String?
+        if let ns = input["new_string"] as? String {
+            source = ns
+        } else if let edits = input["edits"] as? [[String: Any]],
+                  let last = edits.last, let ns = last["new_string"] as? String {
+            source = ns
+        } else {
+            source = nil
+        }
+        guard let text = source else { return nil }
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let t = raw.trimmingCharacters(in: .whitespaces)
+            if t.count >= 4 { return String(t.prefix(200)) }
+        }
+        return nil
     }
 
     /// The trimmed first line of `s`, truncated to `max` characters with an ellipsis.

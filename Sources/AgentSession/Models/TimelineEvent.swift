@@ -47,12 +47,18 @@ public struct TimelineEvent {
     /// A short `HH:MM` timestamp, or `""` when unknown.
     public let timestamp: String
 
+    /// For a `.fileEdit`, a distinctive line of the text the edit inserted — used to
+    /// locate *where in the file* the edit landed (so a follow-mode reader jumps to the
+    /// edit, not the file's first diff hunk). Nil for whole-file writes and non-edits.
+    public let anchor: String?
+
     /// Creates a timeline entry.
-    public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String) {
+    public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String, anchor: String? = nil) {
         self.kind = kind
         self.title = title
         self.detail = detail
         self.filePath = filePath
         self.timestamp = timestamp
+        self.anchor = anchor
     }
 }
