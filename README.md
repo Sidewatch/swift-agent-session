@@ -26,7 +26,7 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/arraypress/swift-agent-session.git", from: "1.0.0")
+    .package(url: "https://github.com/Sidewatch/swift-agent-session.git", from: "1.0.0")
 ]
 ```
 
