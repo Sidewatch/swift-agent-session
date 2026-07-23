@@ -164,7 +164,14 @@ public enum UsageAggregator {
     }
 
     private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.calendar = Calendar(identifier: .gregorian); return f
+        // en_US_POSIX pins ASCII digits — the output is compared lexicographically
+        // against ASCII days from JSONL timestamps, so a locale whose numbering
+        // system is non-Latin (ar_EG, fa_IR, …) would filter out every line.
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        f.calendar = Calendar(identifier: .gregorian)
+        return f
     }()
     /// `"yyyy-MM-dd"` for a date.
     private static func dayString(_ date: Date) -> String { dayFormatter.string(from: date) }

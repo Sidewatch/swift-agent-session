@@ -13,8 +13,10 @@ import Foundation
 /// One entry in an agent's activity timeline, normalized across agents.
 ///
 /// Adapters map each agent's own transcript format onto a stream of these, so a
-/// review surface can render any agent's activity identically.
-public struct TimelineEvent {
+/// review surface can render any agent's activity identically. `Equatable`, so
+/// a polling surface can compare a fresh transcript read against what it last
+/// rendered and skip the rebuild when nothing changed.
+public struct TimelineEvent: Equatable {
 
     /// The category of a timeline entry, which drives its glyph and styling.
     public enum Kind {
