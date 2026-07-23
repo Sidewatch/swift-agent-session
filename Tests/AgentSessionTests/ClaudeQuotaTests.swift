@@ -14,6 +14,25 @@ final class ClaudeQuotaTests: XCTestCase {
     }
     """
 
+    func testSurfacesUnknownPerModelWindows() throws {
+        // The endpoint grows per-model weekly caps over time (Opus, Sonnet, Fable…);
+        // shape-based parsing must surface keys it has never seen, known keys first.
+        let json = """
+        {
+          "seven_day_fable": { "utilization": 42.0, "resets_at": "2026-04-16T03:00:00+00:00" },
+          "five_hour": { "utilization": 10.0, "resets_at": null },
+          "seven_day": { "utilization": 5.0, "resets_at": null },
+          "extra_usage": { "is_enabled": false, "utilization": null }
+        }
+        """
+        let q = try XCTUnwrap(ClaudeQuota.parse(json))
+        XCTAssertEqual(q.windows.map(\.key), ["five_hour", "seven_day", "seven_day_fable"])
+        XCTAssertEqual(q.window("seven_day_fable")?.percentUsed, 42)
+        XCTAssertNotNil(q.window("seven_day_fable")?.resetsAt)
+        XCTAssertEqual(q.fiveHour?.percentUsed, 10)
+        XCTAssertNil(q.window("extra_usage"), "null-utilization objects are not windows")
+    }
+
     func testParsesRealShape() throws {
         let q = try XCTUnwrap(ClaudeQuota.parse(sample))
         XCTAssertEqual(q.fiveHour?.utilization, 33.0)

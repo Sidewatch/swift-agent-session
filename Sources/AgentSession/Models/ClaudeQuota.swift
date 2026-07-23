@@ -27,38 +27,80 @@ public struct ClaudeQuota: Equatable {
         public var percentRemaining: Int { 100 - percentUsed }
     }
 
+    /// One window with the endpoint's key it arrived under (`"five_hour"`,
+    /// `"seven_day_opus"`, `"seven_day_fable"`, …).
+    public struct NamedWindow: Equatable {
+        /// The endpoint's JSON key for this window.
+        public let key: String
+        /// The window's usage.
+        public let window: Window
+
+        public init(key: String, window: Window) {
+            self.key = key
+            self.window = window
+        }
+    }
+
+    /// EVERY window the endpoint returned, in display order: the long-known keys
+    /// first (5-hour, weekly, Opus, Sonnet), then anything new (per-model caps the
+    /// endpoint grows — e.g. `seven_day_fable`) sorted by key. Parsing by shape
+    /// rather than by a fixed key list is what keeps new model caps appearing
+    /// without a code change.
+    public let windows: [NamedWindow]
+
     /// The 5-hour session window.
-    public let fiveHour: Window?
+    public var fiveHour: Window? { window("five_hour") }
     /// The 7-day (weekly) window across all models.
-    public let sevenDay: Window?
+    public var sevenDay: Window? { window("seven_day") }
     /// The 7-day Opus-only cap (nil unless the plan has one active).
-    public let sevenDayOpus: Window?
+    public var sevenDayOpus: Window? { window("seven_day_opus") }
     /// The 7-day Sonnet-only cap (nil unless present).
-    public let sevenDaySonnet: Window?
+    public var sevenDaySonnet: Window? { window("seven_day_sonnet") }
+
+    /// The window stored under `key`, if the endpoint sent one.
+    public func window(_ key: String) -> Window? {
+        windows.first { $0.key == key }?.window
+    }
+
+    public init(windows: [NamedWindow]) {
+        self.windows = windows
+    }
 
     public init(fiveHour: Window?, sevenDay: Window?, sevenDayOpus: Window?, sevenDaySonnet: Window?) {
-        self.fiveHour = fiveHour
-        self.sevenDay = sevenDay
-        self.sevenDayOpus = sevenDayOpus
-        self.sevenDaySonnet = sevenDaySonnet
+        var list: [NamedWindow] = []
+        if let fiveHour { list.append(NamedWindow(key: "five_hour", window: fiveHour)) }
+        if let sevenDay { list.append(NamedWindow(key: "seven_day", window: sevenDay)) }
+        if let sevenDayOpus { list.append(NamedWindow(key: "seven_day_opus", window: sevenDayOpus)) }
+        if let sevenDaySonnet { list.append(NamedWindow(key: "seven_day_sonnet", window: sevenDaySonnet)) }
+        self.windows = list
     }
 
     /// True when at least one window was parsed — the gate for showing quota UI.
-    public var hasAny: Bool {
-        fiveHour != nil || sevenDay != nil || sevenDayOpus != nil || sevenDaySonnet != nil
-    }
+    public var hasAny: Bool { !windows.isEmpty }
+
+    /// The known keys, shown first and in this order when present.
+    private static let preferredOrder = ["five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet"]
 
     /// Parses an `/api/oauth/usage` JSON body. Returns nil if the body isn't JSON or
     /// carries no recognizable window (so a 401/429/HTML error page fails soft).
+    /// ANY top-level object with a numeric `utilization` counts as a window — the
+    /// endpoint adds per-model caps over time (Opus, Sonnet, Fable, …) and they
+    /// should surface without a parser change.
     public static func parse(_ data: Data) -> ClaudeQuota? {
         guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
-        func window(_ key: String) -> Window? {
-            guard let w = obj[key] as? [String: Any],
+        func window(_ value: Any) -> Window? {
+            guard let w = value as? [String: Any],
                   let util = (w["utilization"] as? NSNumber)?.doubleValue else { return nil }
             return Window(utilization: util, resetsAt: (w["resets_at"] as? String).flatMap(parseDate))
         }
-        let q = ClaudeQuota(fiveHour: window("five_hour"), sevenDay: window("seven_day"),
-                            sevenDayOpus: window("seven_day_opus"), sevenDaySonnet: window("seven_day_sonnet"))
+        var list: [NamedWindow] = []
+        for key in preferredOrder {
+            if let v = obj[key], let w = window(v) { list.append(NamedWindow(key: key, window: w)) }
+        }
+        for key in obj.keys.sorted() where !preferredOrder.contains(key) {
+            if let w = window(obj[key]!) { list.append(NamedWindow(key: key, window: w)) }
+        }
+        let q = ClaudeQuota(windows: list)
         return q.hasAny ? q : nil
     }
 
