@@ -94,6 +94,27 @@ final class TurnBoundaryTests: XCTestCase {
         XCTAssertEqual(turn.editedFiles(in: events), ["b.swift", "a.swift"])
     }
 
+    func testIDIsStableForTheSamePromptAndDiffersAcrossTurns() {
+        let a = TurnBoundary(start: 0, end: 1, prompt: "fix the bug", timestamp: "10:00")
+        let same = TurnBoundary(start: 9, end: 20, prompt: "fix the bug", timestamp: "10:00")
+        let later = TurnBoundary(start: 0, end: 1, prompt: "fix the bug", timestamp: "10:05")
+        let other = TurnBoundary(start: 0, end: 1, prompt: "ship it", timestamp: "10:00")
+
+        // Position must not participate: turns are re-derived every poll, and a rolled or
+        // replayed transcript would otherwise re-point an id at a different turn.
+        XCTAssertEqual(a.id, same.id)
+        XCTAssertNotEqual(a.id, later.id)
+        XCTAssertNotEqual(a.id, other.id)
+    }
+
+    func testIDIsRefNameSafe() {
+        let turn = TurnBoundary(start: 0, end: 0, prompt: "rm -rf ../.. ~ ^ : ? * [ ]", timestamp: "10:00")
+        // The id becomes the last component of a git ref, and git rejects these outright.
+        let illegal: Set<Character> = [" ", "~", "^", ":", "?", "*", "[", "]", "\\", "/"]
+        XCTAssertTrue(turn.id.allSatisfy { !illegal.contains($0) }, "unsafe id: \(turn.id)")
+        XCTAssertFalse(turn.id.contains(".."))
+    }
+
     func testEditedFilesOnOutOfRangeTurnIsEmpty() {
         let turn = TurnBoundary(start: 5, end: 9, prompt: "x", timestamp: "")
         XCTAssertTrue(turn.editedFiles(in: [event(.userPrompt, "a")]).isEmpty)

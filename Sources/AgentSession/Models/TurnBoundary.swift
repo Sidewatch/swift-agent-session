@@ -45,6 +45,22 @@ public struct TurnBoundary: Equatable {
     /// The number of events in the turn.
     public var count: Int { end - start + 1 }
 
+    /// A stable identifier for the turn, derived from its opening prompt and timestamp.
+    ///
+    /// Must not be a position: turns are re-derived on every transcript poll, and a transcript
+    /// that rolls or replays would silently re-point an index at a different turn. Must not be
+    /// Swift's `hashValue` either — that is seeded per process, so it changes across relaunches
+    /// and would orphan every persisted checkpoint. This is FNV-1a over the prompt and
+    /// timestamp, which is stable forever and already ref-name-safe.
+    public var id: String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in Array("\(timestamp)|\(prompt)".utf8) {
+            hash ^= UInt64(byte)
+            hash &*= 0x100_0000_01b3
+        }
+        return "turn-" + String(hash, radix: 16)
+    }
+
     /// Splits a chronological timeline into turns, oldest first.
     ///
     /// Every `.userPrompt` opens a turn and closes the previous one. Events *before* the first
