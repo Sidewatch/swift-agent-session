@@ -330,7 +330,8 @@ struct TranscriptState {
     }
 
     /// The trimmed first line of `s`, truncated to `max` characters with an ellipsis.
-    private static func firstLine(_ s: String, _ max: Int = 160) -> String {
+    /// Internal (not private) so every adapter shares one truncation rule.
+    static func firstLine(_ s: String, _ max: Int = 160) -> String {
         let line = s.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? s
         let t = line.trimmingCharacters(in: .whitespaces)
         return t.count > max ? String(t.prefix(max)) + "…" : t

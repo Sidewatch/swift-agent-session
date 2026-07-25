@@ -20,8 +20,9 @@ public enum Agents {
     public static let all: [AgentAdapter] = [
         ClaudeCodeAdapter(),
         CodexAdapter(),
-        // GeminiAdapter(), AiderAdapter(), OpenCodeAdapter() — add when their formats are read
-        // from source the way Codex's was.
+        OpenCodeAdapter(),
+        // GeminiAdapter(), AiderAdapter() — add when their formats are read from source the way
+        // Codex's and OpenCode's were.
     ]
 
     /// The first adapter that has a session for `root` (first match wins), or

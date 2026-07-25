@@ -114,8 +114,8 @@ public struct ClaudeCodeAdapter: AgentAdapter {
     ///
     /// Keyed in the cache by the file's own path (the cache's `root` parameter is only ever a
     /// key), so a fixture parse can't collide with, or invalidate, a live poll of a project.
-    public func events(fromTranscript file: URL) -> [TimelineEvent] {
-        cache.results(for: file, file: file).events
+    public func events(fromSession url: URL) -> [TimelineEvent] {
+        cache.results(for: url, file: url).events
     }
 
     /// The edited-files set and the most recent to-do list from the latest

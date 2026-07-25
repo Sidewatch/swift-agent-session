@@ -43,7 +43,7 @@ final class TranscriptFixtureTests: XCTestCase {
 
     func testParsesATranscriptFileWithNoLiveSession() throws {
         let file = try fixture(twoTurns)
-        let events = ClaudeCodeAdapter().events(fromTranscript: file)
+        let events = ClaudeCodeAdapter().events(fromSession: file)
 
         XCTAssertEqual(events.count, 6)
         XCTAssertEqual(events.map(\.kind), [.userPrompt, .assistantText, .toolUse, .fileEdit,
@@ -57,7 +57,7 @@ final class TranscriptFixtureTests: XCTestCase {
     func testStringAndBlockUserContentBothParse() throws {
         // Claude Code writes a plain-string prompt sometimes and a content-block array other
         // times; both must yield a userPrompt or turn segmentation silently loses a boundary.
-        let events = ClaudeCodeAdapter().events(fromTranscript: try fixture(twoTurns))
+        let events = ClaudeCodeAdapter().events(fromSession: try fixture(twoTurns))
         XCTAssertEqual(events.filter { $0.kind == .userPrompt }.map(\.detail),
                        ["Add a retry", "Cap it at 30s"])
     }
@@ -66,12 +66,12 @@ final class TranscriptFixtureTests: XCTestCase {
         var lines = twoTurns
         lines.insert("not json at all", at: 2)
         lines.insert(#"{"type":"assistant"}"#, at: 4)     // no message
-        let events = ClaudeCodeAdapter().events(fromTranscript: try fixture(lines))
+        let events = ClaudeCodeAdapter().events(fromSession: try fixture(lines))
         XCTAssertEqual(events.count, 6)                    // exactly the well-formed ones
     }
 
     func testTurnsSegmentFromAParsedFixture() throws {
-        let events = ClaudeCodeAdapter().events(fromTranscript: try fixture(twoTurns))
+        let events = ClaudeCodeAdapter().events(fromSession: try fixture(twoTurns))
         let turns = TurnBoundary.turns(in: events)
         XCTAssertEqual(turns.count, 2)
         XCTAssertEqual(turns[0].editedFiles(in: events), ["Up.swift"])
@@ -80,13 +80,13 @@ final class TranscriptFixtureTests: XCTestCase {
 
     func testMissingFileYieldsNoEventsRatherThanFailing() {
         let missing = URL(fileURLWithPath: "/nope/\(UUID().uuidString).jsonl")
-        XCTAssertTrue(ClaudeCodeAdapter().events(fromTranscript: missing).isEmpty)
+        XCTAssertTrue(ClaudeCodeAdapter().events(fromSession: missing).isEmpty)
     }
 
     func testForeignFormatYieldsNoEvents() throws {
         // Another agent's transcript is not an error — it's simply not this adapter's.
         let file = try fixture([#"{"role":"user","parts":[{"text":"hello"}]}"#])
-        XCTAssertTrue(ClaudeCodeAdapter().events(fromTranscript: file).isEmpty)
+        XCTAssertTrue(ClaudeCodeAdapter().events(fromSession: file).isEmpty)
     }
 
     func testFixtureParseDoesNotDisturbAProjectPoll() throws {
@@ -94,8 +94,8 @@ final class TranscriptFixtureTests: XCTestCase {
         // the snapshot a live project poll is using.
         let adapter = ClaudeCodeAdapter()
         let file = try fixture(twoTurns)
-        let first = adapter.events(fromTranscript: file)
+        let first = adapter.events(fromSession: file)
         _ = adapter.events(for: URL(fileURLWithPath: "/some/unrelated/project"))
-        XCTAssertEqual(adapter.events(fromTranscript: file), first)
+        XCTAssertEqual(adapter.events(fromSession: file), first)
     }
 }

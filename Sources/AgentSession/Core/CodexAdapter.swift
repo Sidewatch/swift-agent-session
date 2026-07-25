@@ -69,8 +69,8 @@ public final class CodexAdapter: AgentAdapter {
         cache.results(for: root, file: latestSessionFile(for: root)).summary
     }
 
-    public func events(fromTranscript file: URL) -> [TimelineEvent] {
-        cache.results(for: file, file: file).events
+    public func events(fromSession url: URL) -> [TimelineEvent] {
+        cache.results(for: url, file: url).events
     }
 
     // MARK: - Locating a session

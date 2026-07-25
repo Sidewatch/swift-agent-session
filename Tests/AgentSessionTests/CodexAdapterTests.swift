@@ -56,7 +56,7 @@ final class CodexAdapterTests: XCTestCase {
 
     func testParsesTheCodexDialect() throws {
         let (_, file) = try rollout(conversation)
-        let events = CodexAdapter().events(fromTranscript: file)
+        let events = CodexAdapter().events(fromSession: file)
 
         XCTAssertEqual(events.map(\.kind), [.userPrompt, .assistantText, .toolUse, .fileEdit])
         XCTAssertEqual(events[0].detail, "Add a retry to the uploader")
@@ -72,13 +72,13 @@ final class CodexAdapterTests: XCTestCase {
             #"{"timestamp":"2026-07-26T10:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"ok"}}"#,
             #"{"timestamp":"2026-07-26T10:00:02Z","type":"web_search_call","payload":{}}"#,
         ])
-        XCTAssertTrue(CodexAdapter().events(fromTranscript: file).isEmpty)
+        XCTAssertTrue(CodexAdapter().events(fromSession: file).isEmpty)
     }
 
     func testNonResponseItemLinesAreIgnored() throws {
         // session_meta / turn_context / world_state carry no conversation content.
         let (_, file) = try rollout(conversation, cwd: "/tmp/project")
-        XCTAssertEqual(CodexAdapter().events(fromTranscript: file).count, 4)
+        XCTAssertEqual(CodexAdapter().events(fromSession: file).count, 4)
     }
 
     func testMalformedLinesAreSkipped() throws {
@@ -86,7 +86,7 @@ final class CodexAdapterTests: XCTestCase {
         lines.insert("not json", at: 1)
         lines.insert(#"{"type":"response_item"}"#, at: 3)
         let (_, file) = try rollout(lines)
-        XCTAssertEqual(CodexAdapter().events(fromTranscript: file).count, 4)
+        XCTAssertEqual(CodexAdapter().events(fromSession: file).count, 4)
     }
 
     func testAClaudeTranscriptYieldsNothingFromTheCodexAdapter() throws {
@@ -95,12 +95,12 @@ final class CodexAdapterTests: XCTestCase {
         let (_, file) = try rollout([
             #"{"type":"user","timestamp":"2026-07-26T10:00:00Z","message":{"content":"hello"}}"#,
         ])
-        XCTAssertTrue(CodexAdapter().events(fromTranscript: file).isEmpty)
+        XCTAssertTrue(CodexAdapter().events(fromSession: file).isEmpty)
     }
 
     func testACodexTranscriptYieldsNothingFromTheClaudeAdapter() throws {
         let (_, file) = try rollout(conversation)
-        XCTAssertTrue(ClaudeCodeAdapter().events(fromTranscript: file).isEmpty)
+        XCTAssertTrue(ClaudeCodeAdapter().events(fromSession: file).isEmpty)
     }
 
     // MARK: - Locating a session by working directory
@@ -151,7 +151,7 @@ final class CodexAdapterTests: XCTestCase {
         let (_, file) = try rollout([
             #"{"timestamp":"2026-07-26T10:00:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"c1","name":"apply_patch","input":"*** Add File: fresh.txt\n+hi"}}"#,
         ])
-        let events = CodexAdapter().events(fromTranscript: file)
+        let events = CodexAdapter().events(fromSession: file)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].kind, .fileEdit)
         XCTAssertEqual(events[0].filePath, "fresh.txt")
@@ -163,14 +163,14 @@ final class CodexAdapterTests: XCTestCase {
         let (_, file) = try rollout([
             #"{"timestamp":"2026-07-26T10:00:00.000Z","type":"response_item","payload":{"type":"local_shell_call","status":"completed","action":{"type":"exec","command":["swift","test"]}}}"#,
         ])
-        XCTAssertEqual(CodexAdapter().events(fromTranscript: file).first?.detail, "swift test")
+        XCTAssertEqual(CodexAdapter().events(fromSession: file).first?.detail, "swift test")
     }
 
     func testFractionalTimestampsParse() throws {
         // Codex writes `.[subsecond digits:3]Z`; a parser that only accepted whole seconds
         // would blank every row's time.
         let (_, file) = try rollout(conversation)
-        XCTAssertFalse(CodexAdapter().events(fromTranscript: file).first?.timestamp.isEmpty ?? true)
+        XCTAssertFalse(CodexAdapter().events(fromSession: file).first?.timestamp.isEmpty ?? true)
     }
 
     func testNonEditToolHasNoPath() {
