@@ -84,6 +84,11 @@ struct TranscriptState {
     /// Absolute paths of every file an edit tool wrote to.
     private var edited = Set<String>()
 
+    /// The last Codex prompt/prose emitted, so the same message arriving through both of
+    /// Codex's channels isn't counted twice.
+    private var lastCodexUserText = ""
+    private var lastCodexAssistantText = ""
+
     /// The most recent `TodoWrite` list, as `(text, status)` pairs (last wins).
     private var todos: [(String, String)] = []
 
@@ -112,9 +117,29 @@ struct TranscriptState {
     /// `#[serde(tag = "type", content = "payload")]`. Only `response_item` carries conversation
     /// content, and its payload is itself internally tagged, so the shape is a tag inside a tag.
     private mutating func ingestCodex(_ obj: [String: Any]) {
-        guard obj["type"] as? String == "response_item",
-              let payload = obj["payload"] as? [String: Any] else { return }
+        guard let payload = obj["payload"] as? [String: Any] else { return }
         let ts = Self.shortTime(obj["timestamp"] as? String)
+
+        // Codex records conversation through TWO channels, and which one it uses depends on the
+        // path taken. `event_msg` carries user_message / agent_message with the text directly;
+        // Codex's own recorder tests write a user prompt this way. Ignoring it meant a session
+        // could yield ZERO user prompts — and since turns segment on user prompts, zero turns,
+        // hence no checkpoints and no turn review at all.
+        if obj["type"] as? String == "event_msg" {
+            guard let message = payload["message"] as? String,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            switch payload["type"] as? String {
+            case "user_message":
+                appendCodexUser(message, ts)
+            case "agent_message":
+                appendCodexAssistant(message, ts)
+            default:
+                break
+            }
+            return
+        }
+
+        guard obj["type"] as? String == "response_item" else { return }
 
         switch payload["type"] as? String {
         case "message":
@@ -126,11 +151,9 @@ struct TranscriptState {
                 .joined(separator: " ")
             guard !text.isEmpty else { return }
             if role == "user" {
-                append(TimelineEvent(kind: .userPrompt, title: "You", detail: Self.firstLine(text),
-                                     filePath: nil, timestamp: ts))
+                appendCodexUser(text, ts)
             } else if role == "assistant" {
-                append(TimelineEvent(kind: .assistantText, title: "Codex", detail: Self.firstLine(text),
-                                     filePath: nil, timestamp: ts))
+                appendCodexAssistant(text, ts)
             }
 
         case "function_call", "custom_tool_call":
@@ -155,6 +178,26 @@ struct TranscriptState {
             // reasoning, *_output, web_search_call, compaction… — no timeline row.
             break
         }
+    }
+
+    /// Appends a Codex user prompt, skipping an immediate duplicate.
+    ///
+    /// A session can record the same prompt through both channels (a `response_item` message and
+    /// an `event_msg`), so the identical text arriving twice in a row is one prompt seen twice —
+    /// not two — and would otherwise split one turn into two empty ones.
+    private mutating func appendCodexUser(_ text: String, _ ts: String) {
+        let line = Self.firstLine(text)
+        guard line != lastCodexUserText else { return }
+        lastCodexUserText = line
+        append(TimelineEvent(kind: .userPrompt, title: "You", detail: line, filePath: nil, timestamp: ts))
+    }
+
+    /// Appends Codex assistant prose, skipping an immediate duplicate (same reason as above).
+    private mutating func appendCodexAssistant(_ text: String, _ ts: String) {
+        let line = Self.firstLine(text)
+        guard line != lastCodexAssistantText else { return }
+        lastCodexAssistantText = line
+        append(TimelineEvent(kind: .assistantText, title: "Codex", detail: line, filePath: nil, timestamp: ts))
     }
 
     /// The file a Codex tool call wrote to, or `nil` when the call isn't an edit.

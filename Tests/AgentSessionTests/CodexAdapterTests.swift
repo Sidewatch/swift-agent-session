@@ -103,6 +103,70 @@ final class CodexAdapterTests: XCTestCase {
         XCTAssertTrue(ClaudeCodeAdapter().events(fromSession: file).isEmpty)
     }
 
+    // MARK: - The event_msg channel (found in Codex's own recorder tests)
+
+    func testUserPromptRecordedAsAnEventMsg() throws {
+        // Codex's recorder_tests.rs writes a user prompt exactly like this. Missing it meant a
+        // session could yield zero user prompts — and therefore zero turns, no checkpoints and
+        // no turn review.
+        let (_, file) = try rollout([
+            #"{"timestamp":"2026-07-26T10:00:00.000Z","type":"session_meta","payload":{"id":"u1","cwd":".","originator":"test"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"Hello from user","kind":"plain"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:02.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Hello back"}}"#,
+        ])
+        let events = CodexAdapter().events(fromSession: file)
+        XCTAssertEqual(events.map(\.kind), [.userPrompt, .assistantText])
+        XCTAssertEqual(events[0].detail, "Hello from user")
+        XCTAssertEqual(events[1].detail, "Hello back")
+        XCTAssertEqual(TurnBoundary.turns(in: events).count, 1)
+    }
+
+    func testTheSamePromptThroughBothChannelsCountsOnce() throws {
+        // A session can record one prompt as BOTH a response_item and an event_msg. Counting it
+        // twice would split one turn into two, the second of them empty.
+        let (_, file) = try rollout([
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Add a retry"}]}}"#,
+            #"{"timestamp":"2026-07-26T10:00:01.500Z","type":"event_msg","payload":{"type":"user_message","message":"Add a retry","kind":"plain"}}"#,
+        ])
+        let events = CodexAdapter().events(fromSession: file)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(TurnBoundary.turns(in: events).count, 1)
+    }
+
+    func testDistinctPromptsAreNotCollapsed() throws {
+        // The dedup must only catch an immediate repeat, never two genuinely different prompts.
+        let (_, file) = try rollout([
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"first"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:02.000Z","type":"event_msg","payload":{"type":"user_message","message":"second"}}"#,
+        ])
+        XCTAssertEqual(CodexAdapter().events(fromSession: file).count, 2)
+    }
+
+    func testOtherEventMsgTypesAreIgnored() throws {
+        let (_, file) = try rollout([
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"event_msg","payload":{"type":"token_count","message":"noise"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:02.000Z","type":"event_msg","payload":{"type":"user_message","message":""}}"#,
+        ])
+        XCTAssertTrue(CodexAdapter().events(fromSession: file).isEmpty)
+    }
+
+    func testSessionMetaCarriesCWDAtPayloadTopLevel() throws {
+        // Codex's own tests put cwd directly on the session_meta payload, not nested under meta.
+        let base = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("codex-meta-\(UUID().uuidString)", isDirectory: true)
+        scratch.append(base)
+        let dir = base.appendingPathComponent("sessions/2026/07/26", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("rollout-2026-07-26T10-00-00-meta.jsonl")
+        try [
+            #"{"timestamp":"2026-07-26T10:00:00.000Z","type":"session_meta","payload":{"id":"u1","cwd":"/tmp/meta-project","originator":"test"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"hi"}}"#,
+        ].joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
+
+        let adapter = CodexAdapter(sessionsRoot: base.appendingPathComponent("sessions", isDirectory: true))
+        XCTAssertTrue(adapter.hasSession(for: URL(fileURLWithPath: "/tmp/meta-project")))
+    }
+
     // MARK: - Locating a session by working directory
 
     func testFindsTheSessionRecordingThisProject() throws {
