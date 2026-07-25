@@ -29,6 +29,19 @@ public protocol AgentAdapter {
     /// The activity timeline for `root`, oldest first.
     func events(for root: URL) -> [TimelineEvent]
 
+    /// The activity timeline parsed from one transcript **file**, wherever it happens to live.
+    ///
+    /// An adapter does two separable jobs: *locating* an agent's transcript (which directory,
+    /// which session file, which is newest) and *parsing* it. This is the parsing half on its
+    /// own, and it's what makes an adapter developable against a checked-in fixture — so a new
+    /// agent's adapter can be written, tested and maintained **without installing that agent**.
+    /// `Sidewatch --dump-session <file>` is this method, headless.
+    ///
+    /// - Parameter file: A transcript file in this agent's own format.
+    /// - Returns: The timeline, oldest first. Empty when the file is absent or unparseable —
+    ///   a transcript in the wrong format is not an error, just not this agent's.
+    func events(fromTranscript file: URL) -> [TimelineEvent]
+
     /// Token/cost telemetry for `root`, or `nil` when unavailable.
     func usage(for root: URL) -> AgentUsage?
 

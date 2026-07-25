@@ -108,6 +108,16 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         cache.results(for: root, file: latestSessionFile(for: root)).events
     }
 
+    /// The activity timeline parsed from one transcript file, bypassing the `~/.claude/projects`
+    /// lookup entirely — the seam that lets this adapter be exercised against a checked-in
+    /// fixture rather than a live session.
+    ///
+    /// Keyed in the cache by the file's own path (the cache's `root` parameter is only ever a
+    /// key), so a fixture parse can't collide with, or invalidate, a live poll of a project.
+    public func events(fromTranscript file: URL) -> [TimelineEvent] {
+        cache.results(for: file, file: file).events
+    }
+
     /// The edited-files set and the most recent to-do list from the latest
     /// transcript, or `nil` when there is no transcript at all.
     /// - Note: Served from the incremental cache — steady-state polls cost
