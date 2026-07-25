@@ -154,8 +154,14 @@ public final class GeminiAdapter: AgentAdapter {
     static func partsText(_ content: Any?) -> String {
         if let text = content as? String { return text }
         if let part = content as? [String: Any] { return part["text"] as? String ?? "" }
-        if let parts = content as? [[String: Any]] {
-            return parts.compactMap { $0["text"] as? String }.joined(separator: " ")
+        // The array is [Part | string]; casting it to [[String: Any]] fails OUTRIGHT the moment
+        // one raw string is present, which returned "" for the whole message — and for a user
+        // record that silently deletes a turn boundary. Map element-wise instead.
+        if let parts = content as? [Any] {
+            return parts.compactMap { element -> String? in
+                if let text = element as? String { return text }
+                return (element as? [String: Any])?["text"] as? String
+            }.joined(separator: " ")
         }
         return ""
     }

@@ -84,10 +84,12 @@ struct TranscriptState {
     /// Absolute paths of every file an edit tool wrote to.
     private var edited = Set<String>()
 
-    /// The last Codex prompt/prose emitted, so the same message arriving through both of
-    /// Codex's channels isn't counted twice.
-    private var lastCodexUserText = ""
-    private var lastCodexAssistantText = ""
+    /// The immediately-previous Codex row, so one message arriving through both of Codex's
+    /// channels isn't counted twice. Cleared by any other appended row, so the suppression is
+    /// strictly ADJACENT — a prompt genuinely repeated later ("continue", "yes") must still open
+    /// its own turn.
+    private var lastCodexUserText: String?
+    private var lastCodexAssistantText: String?
 
     /// The most recent `TodoWrite` list, as `(text, status)` pairs (last wins).
     private var todos: [(String, String)] = []
@@ -157,6 +159,9 @@ struct TranscriptState {
             }
 
         case "function_call", "custom_tool_call":
+            // A tool call between two identical prompts means they are not adjacent.
+            lastCodexUserText = nil
+            lastCodexAssistantText = nil
             let name = payload["name"] as? String ?? "tool"
             // Arguments are a JSON *string*, not an object — it's the model's raw tool call.
             let raw = (payload["arguments"] as? String) ?? (payload["input"] as? String) ?? ""
@@ -167,6 +172,8 @@ struct TranscriptState {
             if let path { edited.insert(path) }
 
         case "local_shell_call":
+            lastCodexUserText = nil
+            lastCodexAssistantText = nil
             // The action holds the argv; render it like any other shell tool row.
             let action = payload["action"] as? [String: Any] ?? [:]
             let command = (action["command"] as? [String])?.joined(separator: " ")
@@ -186,18 +193,22 @@ struct TranscriptState {
     /// an `event_msg`), so the identical text arriving twice in a row is one prompt seen twice —
     /// not two — and would otherwise split one turn into two empty ones.
     private mutating func appendCodexUser(_ text: String, _ ts: String) {
-        let line = Self.firstLine(text)
-        guard line != lastCodexUserText else { return }
-        lastCodexUserText = line
-        append(TimelineEvent(kind: .userPrompt, title: "You", detail: line, filePath: nil, timestamp: ts))
+        // Compare the FULL text, not firstLine: two different prompts sharing a first line
+        // ("Fix this:\n<code A>" / "Fix this:\n<code B>") are two prompts, not one.
+        guard text != lastCodexUserText else { return }
+        append(TimelineEvent(kind: .userPrompt, title: "You", detail: Self.firstLine(text),
+                             filePath: nil, timestamp: ts))
+        lastCodexUserText = text
+        lastCodexAssistantText = nil
     }
 
     /// Appends Codex assistant prose, skipping an immediate duplicate (same reason as above).
     private mutating func appendCodexAssistant(_ text: String, _ ts: String) {
-        let line = Self.firstLine(text)
-        guard line != lastCodexAssistantText else { return }
-        lastCodexAssistantText = line
-        append(TimelineEvent(kind: .assistantText, title: "Codex", detail: line, filePath: nil, timestamp: ts))
+        guard text != lastCodexAssistantText else { return }
+        append(TimelineEvent(kind: .assistantText, title: "Codex", detail: Self.firstLine(text),
+                             filePath: nil, timestamp: ts))
+        lastCodexAssistantText = text
+        lastCodexUserText = nil
     }
 
     /// The file a Codex tool call wrote to, or `nil` when the call isn't an edit.

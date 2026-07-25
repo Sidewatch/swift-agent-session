@@ -47,11 +47,18 @@ public struct TurnBoundary: Equatable {
 
     /// A stable identifier for the turn, derived from its opening prompt and timestamp.
     ///
-    /// Must not be a position: turns are re-derived on every transcript poll, and a transcript
-    /// that rolls or replays would silently re-point an index at a different turn. Must not be
-    /// Swift's `hashValue` either — that is seeded per process, so it changes across relaunches
-    /// and would orphan every persisted checkpoint. This is FNV-1a over the prompt and
-    /// timestamp, which is stable forever and already ref-name-safe.
+    /// Must not be a position. Turns are re-derived on every poll, a transcript that rolls or
+    /// replays re-points indices, and `TranscriptState` trims events from the FRONT once a
+    /// session passes its cap — so every index shifts as a long session grows, which would
+    /// orphan every persisted checkpoint. Must not be Swift's `hashValue` either: that is seeded
+    /// per process and changes across relaunches. FNV-1a over the opening prompt and its
+    /// timestamp is stable forever and already ref-name-safe.
+    ///
+    /// - Note: The prompt here is the event's `detail`, and the timestamp is only `HH:mm`, so two
+    ///   turns opened by the SAME text within the same clock minute collapse to one id and share
+    ///   a checkpoint — the later turn's diff would then start too early. Accepted deliberately:
+    ///   the alternatives all reintroduce position, which is the worse failure. Fixing it
+    ///   properly means carrying a full-precision timestamp on `TimelineEvent`.
     public var id: String {
         var hash: UInt64 = 0xcbf2_9ce4_8422_2325
         for byte in Array("\(timestamp)|\(prompt)".utf8) {

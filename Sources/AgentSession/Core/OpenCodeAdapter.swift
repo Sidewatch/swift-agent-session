@@ -204,6 +204,18 @@ public final class OpenCodeAdapter: AgentAdapter {
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
+    /// `HH:mm` in a fixed locale.
+    ///
+    /// A `DateFormatter` with an explicit `dateFormat` still honours the user's locale, so under
+    /// a 12-hour region the pattern is rewritten and OpenCode rows would render differently from
+    /// every other adapter's. `en_US_POSIX` pins it. Built once — DateFormatter is expensive.
+    private static let hhmm: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     private static func modified(_ url: URL) -> Date? {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
@@ -216,8 +228,6 @@ public final class OpenCodeAdapter: AgentAdapter {
         let millis = (message["time"] as? [String: Any])?["created"] as? Double
             ?? message["created"] as? Double
         guard let millis else { return "" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: Date(timeIntervalSince1970: millis / 1000))
+        return Self.hhmm.string(from: Date(timeIntervalSince1970: millis / 1000))
     }
 }

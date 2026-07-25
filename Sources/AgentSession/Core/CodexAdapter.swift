@@ -108,7 +108,10 @@ public final class CodexAdapter: AgentAdapter {
         // `readData(ofLength:)` rather than `read(upToCount:)`: the package deploys to
         // macOS 10.15, and the throwing variant is 10.15.4+.
         let head = handle.readData(ofLength: 64 * 1024)
-        guard let text = String(data: head, encoding: .utf8) else { return nil }
+        // A fixed byte cut can land inside a multi-byte sequence, and strict UTF-8 decoding then
+        // returns nil for the WHOLE head — losing cwd even though it sits on line 1. Drop the
+        // trailing partial character rather than the file.
+        guard let text = Self.lenientUTF8(head) else { return nil }
         for line in text.split(separator: "\n") {
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -116,6 +119,20 @@ public final class CodexAdapter: AgentAdapter {
             // `turn_context` carries it directly; `session_meta` nests it under `meta`.
             if let cwd = payload["cwd"] as? String { return cwd }
             if let meta = payload["meta"] as? [String: Any], let cwd = meta["cwd"] as? String { return cwd }
+        }
+        return nil
+    }
+
+    /// Decodes `data` as UTF-8, discarding a truncated final character rather than failing.
+    ///
+    /// The head read is a fixed byte count, so it can land inside a multi-byte sequence. Strict
+    /// decoding then returns nil for the WHOLE buffer, which would lose `cwd` even when it sits
+    /// on line 1 — and the session would be permanently invisible to the app.
+    static func lenientUTF8(_ data: Data) -> String? {
+        if let text = String(data: data, encoding: .utf8) { return text }
+        // A UTF-8 sequence is at most 4 bytes, so at most 3 trailing bytes can be partial.
+        for drop in 1...3 where data.count > drop {
+            if let text = String(data: data.dropLast(drop), encoding: .utf8) { return text }
         }
         return nil
     }

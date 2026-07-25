@@ -136,6 +136,14 @@ final class GeminiAdapterTests: XCTestCase {
         XCTAssertEqual(TurnBoundary.turns(in: events).count, 1)
     }
 
+    func testMixedPartArrayWithRawStringsStillYieldsText() {
+        // PartListUnion arrays may hold raw strings alongside {text} parts. Casting the array to
+        // [[String: Any]] failed outright on the first raw string, blanking the whole message —
+        // and for a user record that silently deletes a turn boundary.
+        XCTAssertEqual(GeminiAdapter.partsText(["raw", ["text": "part"]]), "raw part")
+        XCTAssertEqual(GeminiAdapter.partsText(["only raw"]), "only raw")
+    }
+
     // MARK: - Edit detection
 
     func testOnlyWritingToolsCountAsEdits() {

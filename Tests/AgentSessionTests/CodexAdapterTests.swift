@@ -133,6 +133,42 @@ final class CodexAdapterTests: XCTestCase {
         XCTAssertEqual(TurnBoundary.turns(in: events).count, 1)
     }
 
+    func testARepeatedPromptLaterInTheSessionStillOpensItsOwnTurn() throws {
+        // The dedup was session-lifetime, not adjacent: a second "continue" was dropped no matter
+        // how much sat between, so its turn had no boundary, got no checkpoint, and its edits
+        // were attributed to the previous prompt.
+        let (_, file) = try rollout([
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"continue"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:02.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Done step 1."}}"#,
+            #"{"timestamp":"2026-07-26T10:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"apply_patch","call_id":"c1","arguments":"{\"input\":\"*** Update File: A.swift\"}"}}"#,
+            #"{"timestamp":"2026-07-26T10:05:00.000Z","type":"event_msg","payload":{"type":"user_message","message":"continue"}}"#,
+            #"{"timestamp":"2026-07-26T10:05:02.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Done step 2."}}"#,
+        ])
+        let events = CodexAdapter().events(fromSession: file)
+        XCTAssertEqual(events.filter { $0.kind == .userPrompt }.count, 2)
+        XCTAssertEqual(TurnBoundary.turns(in: events).count, 2)
+    }
+
+    func testPromptsSharingAFirstLineAreNotCollapsed() throws {
+        // The comparison used firstLine(), so two different prompts with the same opening line
+        // merged into one turn.
+        let (_, file) = try rollout([
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"Fix this:\nlet a = 1"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:02.000Z","type":"event_msg","payload":{"type":"agent_message","message":"ok"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:03.000Z","type":"event_msg","payload":{"type":"user_message","message":"Fix this:\nlet b = 2"}}"#,
+        ])
+        XCTAssertEqual(TurnBoundary.turns(in: CodexAdapter().events(fromSession: file)).count, 2)
+    }
+
+    func testHeadDecodeSurvivesAMultiByteCharacterOnTheBoundary() {
+        // A fixed 64KiB cut can land mid-sequence; strict decoding then returned nil for the
+        // whole head, losing cwd and making the session permanently invisible.
+        var data = Data("x".utf8)
+        data.append(contentsOf: Array("é".utf8).dropLast())   // truncated 2-byte sequence
+        XCTAssertEqual(CodexAdapter.lenientUTF8(data), "x")
+        XCTAssertEqual(CodexAdapter.lenientUTF8(Data("clean".utf8)), "clean")
+    }
+
     func testDistinctPromptsAreNotCollapsed() throws {
         // The dedup must only catch an immediate repeat, never two genuinely different prompts.
         let (_, file) = try rollout([
