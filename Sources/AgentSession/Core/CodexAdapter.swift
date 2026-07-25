@@ -44,6 +44,9 @@ public final class CodexAdapter: AgentAdapter {
     static let scanLimit = 60
 
     private let cache = TranscriptCache(format: .codex)
+    /// Locating a Codex session walks the sessions tree and head-reads up to
+    /// ``scanLimit`` rollouts; the 2s poll asks three times per tick (has/events/summary).
+    private let locationMemo = SessionMemo<URL?>()
 
     /// Creates an adapter reading the real `$CODEX_HOME/sessions` (defaulting to `~/.codex`).
     public init() {
@@ -55,10 +58,10 @@ public final class CodexAdapter: AgentAdapter {
     /// Test seam: read rollouts from an arbitrary sessions container.
     init(sessionsRoot: URL) { self.sessionsRoot = sessionsRoot }
 
-    public func hasSession(for root: URL) -> Bool { latestSessionFile(for: root) != nil }
+    public func hasSession(for root: URL) -> Bool { memoizedSessionFile(for: root) != nil }
 
     public func events(for root: URL) -> [TimelineEvent] {
-        cache.results(for: root, file: latestSessionFile(for: root)).events
+        cache.results(for: root, file: memoizedSessionFile(for: root)).events
     }
 
     /// Codex records token usage in its own event stream; this adapter does not read it yet, so
@@ -66,11 +69,16 @@ public final class CodexAdapter: AgentAdapter {
     public func usage(for root: URL) -> AgentUsage? { nil }
 
     public func summary(for root: URL) -> AgentSummary? {
-        cache.results(for: root, file: latestSessionFile(for: root)).summary
+        cache.results(for: root, file: memoizedSessionFile(for: root)).summary
     }
 
     public func events(fromSession url: URL) -> [TimelineEvent] {
         cache.results(for: url, file: url).events
+    }
+
+    /// ``latestSessionFile(for:)`` behind the memo.
+    private func memoizedSessionFile(for root: URL) -> URL? {
+        locationMemo.value(for: root.path) { latestSessionFile(for: root) }
     }
 
     // MARK: - Locating a session

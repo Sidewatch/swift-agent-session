@@ -47,11 +47,23 @@ public final class GeminiAdapter: AgentAdapter {
     /// Test seam: read from an arbitrary temp container.
     init(tempRoot: URL) { self.tempRoot = tempRoot }
 
-    public func hasSession(for root: URL) -> Bool { latestChatFile(for: root) != nil }
+    /// Memoizes located sessions and parsed events — see ``SessionMemo``.
+    private let locationMemo = SessionMemo<URL?>()
+    private let eventsMemo = SessionMemo<[TimelineEvent]>()
+
+    public func hasSession(for root: URL) -> Bool { memoizedChatFile(for: root) != nil }
 
     public func events(for root: URL) -> [TimelineEvent] {
-        guard let file = latestChatFile(for: root) else { return [] }
-        return events(fromSession: file)
+        eventsMemo.value(for: root.path) {
+            guard let file = memoizedChatFile(for: root) else { return [] }
+            return events(fromSession: file)
+        }
+    }
+
+    /// ``latestChatFile(for:)`` behind the memo — it scans `~/.gemini/tmp` reading a marker file
+    /// per directory, and the 2s poll asks for it repeatedly.
+    private func memoizedChatFile(for root: URL) -> URL? {
+        locationMemo.value(for: root.path) { latestChatFile(for: root) }
     }
 
     /// Gemini records token summaries per message; not read yet, so the Usage dashboard stays

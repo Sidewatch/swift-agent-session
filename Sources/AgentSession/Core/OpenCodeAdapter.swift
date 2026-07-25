@@ -54,11 +54,23 @@ public final class OpenCodeAdapter: AgentAdapter {
     /// Test seam: read from an arbitrary storage container.
     init(storageRoot: URL) { self.storageRoot = storageRoot }
 
-    public func hasSession(for root: URL) -> Bool { latestSessionDir(for: root) != nil }
+    /// Memoizes located sessions and parsed events — see ``SessionMemo``.
+    private let locationMemo = SessionMemo<URL?>()
+    private let eventsMemo = SessionMemo<[TimelineEvent]>()
+
+    public func hasSession(for root: URL) -> Bool { memoizedSessionDir(for: root) != nil }
 
     public func events(for root: URL) -> [TimelineEvent] {
-        guard let dir = latestSessionDir(for: root) else { return [] }
-        return events(fromSession: dir)
+        eventsMemo.value(for: root.path) {
+            guard let dir = memoizedSessionDir(for: root) else { return [] }
+            return events(fromSession: dir)
+        }
+    }
+
+    /// ``latestSessionDir(for:)`` behind the memo — it walks directories and reads JSON, and the
+    /// 2s poll asks for it repeatedly.
+    private func memoizedSessionDir(for root: URL) -> URL? {
+        locationMemo.value(for: root.path) { latestSessionDir(for: root) }
     }
 
     /// OpenCode records token usage per message; not read yet, so the Usage dashboard stays
@@ -66,6 +78,7 @@ public final class OpenCodeAdapter: AgentAdapter {
     public func usage(for root: URL) -> AgentUsage? { nil }
 
     public func summary(for root: URL) -> AgentSummary? {
+        // events(for:) is memoized, so this no longer re-reads the whole session.
         let events = events(for: root)
         guard !events.isEmpty else { return nil }
         let edited = Set(events.compactMap { $0.kind == .fileEdit ? $0.filePath : nil })
