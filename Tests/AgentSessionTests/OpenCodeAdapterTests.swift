@@ -164,6 +164,35 @@ final class OpenCodeAdapterTests: XCTestCase {
         XCTAssertEqual(OpenCodeAdapter.editedPath(tool: "Write", input: ["file_path": "b.swift"]), "b.swift")
     }
 
+    // MARK: - Shapes confirmed against OpenCode's source
+
+    func testToolArgumentsComeFromStateInputAtEveryStatus() throws {
+        // Verified in message-v2.ts: a tool part is {type:"tool", tool, callID, state:{status,
+        // input, …}} and `state.input` is present for pending/running/completed/error alike, so
+        // a still-running edit must not lose its path.
+        let storage = try storage(messages: [
+            ("msg_001", "assistant", [
+                #"{"type":"tool","tool":"edit","callID":"c1","state":{"status":"running","input":{"filePath":"A.swift"}}}"#,
+                #"{"type":"tool","tool":"edit","callID":"c2","state":{"status":"completed","input":{"filePath":"B.swift"},"output":"ok"}}"#,
+                #"{"type":"tool","tool":"bash","callID":"c3","state":{"status":"error","input":{"command":"false"},"error":"exit 1"}}"#,
+            ]),
+        ])
+        let events = OpenCodeAdapter(storageRoot: storage)
+            .events(fromSession: storage.appendingPathComponent("message/ses_1"))
+        XCTAssertEqual(events.map(\.filePath), ["A.swift", "B.swift", nil])
+        XCTAssertEqual(events[2].detail, "false")
+    }
+
+    func testProjectRecordIsMatchedByAnyPathValue() throws {
+        // The record is {id, worktree} today; matching any string value that resolves to the root
+        // keeps this working if that field is renamed, which it already has been once.
+        let storage = try storage(projectPath: "/tmp/renamed-field", messages: conversation)
+        let file = storage.appendingPathComponent("project/prj_1.json")
+        try #"{"id":"prj_1","directory":"/tmp/renamed-field"}"#.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertTrue(OpenCodeAdapter(storageRoot: storage)
+            .hasSession(for: URL(fileURLWithPath: "/tmp/renamed-field")))
+    }
+
     // MARK: - Cross-dialect safety
 
     func testDeclinesOtherAgentsFormats() throws {

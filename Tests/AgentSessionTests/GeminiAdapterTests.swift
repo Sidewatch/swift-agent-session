@@ -105,6 +105,37 @@ final class GeminiAdapterTests: XCTestCase {
         XCTAssertEqual(GeminiAdapter.partsText([["inlineData": "x"]]), "")
     }
 
+    // MARK: - Ignored user content (ported from gemini-cli's own rule)
+
+    func testMachineryIsNotAPrompt() {
+        // Verified against gemini-cli's isIgnoredUserContent and the cases its tests assert on.
+        XCTAssertTrue(GeminiAdapter.isIgnoredUserContent("/resume"))
+        XCTAssertTrue(GeminiAdapter.isIgnoredUserContent("?help"))
+        XCTAssertTrue(GeminiAdapter.isIgnoredUserContent("<session_context>previous state</session_context>"))
+        XCTAssertTrue(GeminiAdapter.isIgnoredUserContent("<hook_context>hook data</hook_context>"))
+        XCTAssertTrue(GeminiAdapter.isIgnoredUserContent("   "))
+        XCTAssertFalse(GeminiAdapter.isIgnoredUserContent("Add a retry"))
+    }
+
+    func testInjectedRecordsDoNotOpenSpuriousTurns() throws {
+        // The real cost of getting this wrong: each machinery record would start a new turn, so
+        // checkpoints and turn diffs would be cut at boundaries the human never created.
+        let record = """
+        {"sessionId":"s","projectHash":"a","startTime":"2026-07-26T10:00:00.000Z","messages":[
+         {"id":"m1","timestamp":"2026-07-26T10:00:00.000Z","type":"user","content":"<session_context>state</session_context>"},
+         {"id":"m2","timestamp":"2026-07-26T10:00:01.000Z","type":"user","content":"/resume"},
+         {"id":"m3","timestamp":"2026-07-26T10:00:02.000Z","type":"user","content":"Add a retry"},
+         {"id":"m4","timestamp":"2026-07-26T10:00:03.000Z","type":"gemini","content":"Done."}
+        ]}
+        """
+        let root = try tempRoot(chats: [("s.json", record)])
+        let events = GeminiAdapter(tempRoot: root)
+            .events(fromSession: root.appendingPathComponent("my-project/chats/s.json"))
+        XCTAssertEqual(events.map(\.kind), [.userPrompt, .assistantText])
+        XCTAssertEqual(events[0].detail, "Add a retry")
+        XCTAssertEqual(TurnBoundary.turns(in: events).count, 1)
+    }
+
     // MARK: - Edit detection
 
     func testOnlyWritingToolsCountAsEdits() {

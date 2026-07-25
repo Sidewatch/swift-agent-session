@@ -100,7 +100,7 @@ public final class GeminiAdapter: AgentAdapter {
 
         switch message["type"] as? String {
         case "user":
-            guard !text.isEmpty else { return [] }
+            guard !isIgnoredUserContent(text) else { return [] }
             return [TimelineEvent(kind: .userPrompt, title: "You", detail: TranscriptState.firstLine(text),
                                   filePath: nil, timestamp: time)]
 
@@ -128,6 +128,23 @@ public final class GeminiAdapter: AgentAdapter {
             // info / error / warning are UI notices, not conversation.
             return []
         }
+    }
+
+    /// Whether a user record is machinery rather than something the human typed.
+    ///
+    /// Ported verbatim from gemini-cli's `isIgnoredUserContent` (`utils/sessionUtils.ts`), which
+    /// it uses to decide what counts as real conversation. Slash commands, `?` help queries and
+    /// the `<session_context>` / `<hook_context>` blocks Gemini injects are all recorded as
+    /// `type: "user"` records — showing them as prompts would be noise, but worse, each one would
+    /// open a new TURN, so checkpoints and turn diffs would be cut at boundaries the human never
+    /// created.
+    static func isIgnoredUserContent(_ content: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty
+            || trimmed.hasPrefix("/")
+            || trimmed.hasPrefix("?")
+            || trimmed.hasPrefix("<session_context>")
+            || trimmed.hasPrefix("<hook_context>")
     }
 
     /// Flattens Gemini's `PartListUnion` into text.
