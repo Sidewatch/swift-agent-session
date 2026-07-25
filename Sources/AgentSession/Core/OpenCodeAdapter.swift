@@ -73,9 +73,57 @@ public final class OpenCodeAdapter: AgentAdapter {
         locationMemo.value(for: root.path) { latestSessionDir(for: root) }
     }
 
-    /// OpenCode records token usage per message; not read yet, so the Usage dashboard stays
-    /// Claude-only rather than showing a confidently wrong zero.
-    public func usage(for root: URL) -> AgentUsage? { nil }
+    /// Token/cost telemetry summed over the session's assistant messages.
+    ///
+    /// OpenCode records `cost` directly, so this is real spend rather than an estimate from a
+    /// price list. `contextLimit` is left at zero — OpenCode does not record the model's window,
+    /// and `AgentUsage.contextPercent` reports 0 for an unknown limit rather than inventing one.
+    public func usage(for root: URL) -> AgentUsage? {
+        guard let dir = memoizedSessionDir(for: root),
+              let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        else { return nil }
+
+        var context = 0, output = 0, cost = 0.0, sawAny = false
+        for file in files.filter({ $0.pathExtension == "json" }).sorted(by: { $0.path < $1.path }) {
+            guard let message = Self.json(at: file), let tokens = Self.tokens(in: message) else { continue }
+            sawAny = true
+            let input = (tokens["input"] as? Double ?? 0)
+                + ((tokens["cache"] as? [String: Any])?["read"] as? Double ?? 0)
+                + ((tokens["cache"] as? [String: Any])?["write"] as? Double ?? 0)
+            let out = tokens["output"] as? Double ?? 0
+            // Context is the LATEST message's footprint, not the sum: it is a window fill.
+            context = Int(input + out + (tokens["reasoning"] as? Double ?? 0))
+            output += Int(out)
+            cost += Self.cost(in: message)
+        }
+        guard sawAny else { return nil }
+        return AgentUsage(contextTokens: context, contextLimit: 0, outputTokens: output, costUSD: cost)
+    }
+
+    /// The `tokens` object on an assistant message, wherever the schema nests it.
+    ///
+    /// It has lived at the top level and under `metadata.assistant` across versions, so this
+    /// probes rather than hard-coding one path that a release renames.
+    static func tokens(in message: [String: Any]) -> [String: Any]? {
+        if let tokens = message["tokens"] as? [String: Any] { return tokens }
+        if let metadata = message["metadata"] as? [String: Any] {
+            if let tokens = metadata["tokens"] as? [String: Any] { return tokens }
+            if let assistant = metadata["assistant"] as? [String: Any],
+               let tokens = assistant["tokens"] as? [String: Any] { return tokens }
+        }
+        return nil
+    }
+
+    /// The `cost` on an assistant message, probed the same way.
+    static func cost(in message: [String: Any]) -> Double {
+        if let cost = message["cost"] as? Double { return cost }
+        if let metadata = message["metadata"] as? [String: Any] {
+            if let cost = metadata["cost"] as? Double { return cost }
+            if let assistant = metadata["assistant"] as? [String: Any],
+               let cost = assistant["cost"] as? Double { return cost }
+        }
+        return 0
+    }
 
     public func summary(for root: URL) -> AgentSummary? {
         // events(for:) is memoized, so this no longer re-reads the whole session.

@@ -203,6 +203,27 @@ final class CodexAdapterTests: XCTestCase {
         XCTAssertTrue(adapter.hasSession(for: URL(fileURLWithPath: "/tmp/meta-project")))
     }
 
+    // MARK: - Usage / context window
+
+    func testUsageAndContextWindowFromTokenCountEvents() throws {
+        // Codex states model_context_window outright — Claude's has to be inferred.
+        let (_, file) = try rollout([
+            #"{"timestamp":"2026-07-26T10:00:01.000Z","type":"event_msg","payload":{"type":"user_message","message":"hi"}}"#,
+            #"{"timestamp":"2026-07-26T10:00:02.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":900,"cached_input_tokens":100,"cache_write_input_tokens":0,"output_tokens":250,"reasoning_output_tokens":0,"total_tokens":1250},"last_token_usage":{"input_tokens":800,"cached_input_tokens":100,"cache_write_input_tokens":0,"output_tokens":100,"reasoning_output_tokens":0,"total_tokens":1000},"model_context_window":272000}}}"#,
+        ])
+        let usage = try XCTUnwrap(CodexAdapter().events(fromSession: file).isEmpty ? nil
+                                  : CodexAdapter.usageForTesting(file))
+        XCTAssertEqual(usage.contextTokens, 1000)     // last request = the window fill
+        XCTAssertEqual(usage.contextLimit, 272_000)   // stated, not inferred
+        XCTAssertEqual(usage.outputTokens, 250)       // cumulative
+        XCTAssertEqual(usage.costUSD, 0)              // Codex records no spend; don't invent one
+    }
+
+    func testNoTokenCountMeansNoUsageRatherThanZeroes() throws {
+        let (_, file) = try rollout(conversation)
+        XCTAssertNil(CodexAdapter.usageForTesting(file))
+    }
+
     // MARK: - Locating a session by working directory
 
     func testFindsTheSessionRecordingThisProject() throws {

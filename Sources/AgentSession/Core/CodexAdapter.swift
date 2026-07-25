@@ -64,9 +64,13 @@ public final class CodexAdapter: AgentAdapter {
         cache.results(for: root, file: memoizedSessionFile(for: root)).events
     }
 
-    /// Codex records token usage in its own event stream; this adapter does not read it yet, so
-    /// the Usage dashboard stays Claude-only rather than showing a confidently wrong zero.
-    public func usage(for root: URL) -> AgentUsage? { nil }
+    /// Token/context telemetry from the rollout's `token_count` events.
+    ///
+    /// Cost is left at zero: Codex records tokens but not spend, and the model's price list is
+    /// not ours to guess at — a fabricated number in a cost column is worse than an absent one.
+    public func usage(for root: URL) -> AgentUsage? {
+        cache.results(for: root, file: memoizedSessionFile(for: root)).usage
+    }
 
     public func summary(for root: URL) -> AgentSummary? {
         cache.results(for: root, file: memoizedSessionFile(for: root)).summary
@@ -143,5 +147,10 @@ public final class CodexAdapter: AgentAdapter {
             if let text = String(data: data.dropLast(drop), encoding: .utf8) { return text }
         }
         return nil
+    }
+
+    /// Test seam: usage parsed straight from a rollout file, bypassing the project lookup.
+    static func usageForTesting(_ file: URL) -> AgentUsage? {
+        TranscriptCache(format: .codex).results(for: file, file: file).usage
     }
 }

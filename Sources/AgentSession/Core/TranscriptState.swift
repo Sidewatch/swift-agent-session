@@ -84,6 +84,9 @@ struct TranscriptState {
     /// Absolute paths of every file an edit tool wrote to.
     private var edited = Set<String>()
 
+    /// The model's context window, as Codex states it. Zero until a token_count arrives.
+    private var codexContextLimit = 0
+
     /// The immediately-previous Codex row, so one message arriving through both of Codex's
     /// channels isn't counted twice. Cleared by any other appended row, so the suppression is
     /// strictly ADJACENT — a prompt genuinely repeated later ("continue", "yes") must still open
@@ -128,6 +131,12 @@ struct TranscriptState {
         // could yield ZERO user prompts — and since turns segment on user prompts, zero turns,
         // hence no checkpoints and no turn review at all.
         if obj["type"] as? String == "event_msg" {
+            // Codex reports token usage — and, uniquely, the model's context window — in its own
+            // event stream rather than on each message, so it is read here before the text cases.
+            if payload["type"] as? String == "token_count" {
+                ingestCodexTokens(payload["info"] as? [String: Any])
+                return
+            }
             guard let message = payload["message"] as? String,
                   !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             switch payload["type"] as? String {
@@ -185,6 +194,24 @@ struct TranscriptState {
             // reasoning, *_output, web_search_call, compaction… — no timeline row.
             break
         }
+    }
+
+    /// Folds a Codex `token_count` payload into the usage accumulators.
+    ///
+    /// `last_token_usage` is the most recent request, which is the context-window fill;
+    /// `total_token_usage` accumulates across the session. `model_context_window` is stated
+    /// outright — Claude's has to be inferred from the largest context seen.
+    private mutating func ingestCodexTokens(_ info: [String: Any]?) {
+        guard let info else { return }
+        if let window = info["model_context_window"] as? Int, window > 0 { codexContextLimit = window }
+        if let last = info["last_token_usage"] as? [String: Any] {
+            let total = last["total_tokens"] as? Int
+                ?? ["input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens"]
+                    .compactMap { last[$0] as? Int }.reduce(0, +)
+            if total > 0 { curCtx = total; maxCtx = max(maxCtx, total) }
+        }
+        if let all = info["total_token_usage"] as? [String: Any],
+           let out = all["output_tokens"] as? Int { totalOut = out }
     }
 
     /// Appends a Codex user prompt, skipping an immediate duplicate.
@@ -332,7 +359,8 @@ struct TranscriptState {
     /// transcript carries no usage records at all.
     var usageResult: AgentUsage? {
         guard maxCtx > 0 else { return nil }
-        let limit = maxCtx > 200_000 ? 1_000_000 : 200_000
+        // Codex publishes the window; Claude's is inferred from the largest context observed.
+        let limit = codexContextLimit > 0 ? codexContextLimit : (maxCtx > 200_000 ? 1_000_000 : 200_000)
         return AgentUsage(contextTokens: curCtx, contextLimit: limit, outputTokens: totalOut, costUSD: cost)
     }
 

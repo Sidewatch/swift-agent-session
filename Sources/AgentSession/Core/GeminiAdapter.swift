@@ -66,9 +66,25 @@ public final class GeminiAdapter: AgentAdapter {
         locationMemo.value(for: root.path) { latestChatFile(for: root) }
     }
 
-    /// Gemini records token summaries per message; not read yet, so the Usage dashboard stays
-    /// Claude-only rather than showing a confidently wrong zero.
-    public func usage(for root: URL) -> AgentUsage? { nil }
+    /// Token telemetry from the `tokens` summary Gemini records on each assistant message.
+    ///
+    /// Cost is left at zero (Gemini records none, and a guessed price is worse than a blank), and
+    /// so is `contextLimit` — the window is not in the transcript, and `AgentUsage.contextPercent`
+    /// reports 0 for an unknown limit rather than inventing one.
+    public func usage(for root: URL) -> AgentUsage? {
+        guard let file = memoizedChatFile(for: root), let data = try? Data(contentsOf: file) else { return nil }
+        var context = 0, output = 0, sawAny = false
+        for message in Self.messages(in: data) {
+            guard message["type"] as? String == "gemini",
+                  let tokens = message["tokens"] as? [String: Any] else { continue }
+            sawAny = true
+            // `total` is this exchange's whole footprint — the window fill, so latest wins.
+            if let total = tokens["total"] as? Int { context = total }
+            output += tokens["output"] as? Int ?? 0
+        }
+        guard sawAny else { return nil }
+        return AgentUsage(contextTokens: context, contextLimit: 0, outputTokens: output, costUSD: 0)
+    }
 
     public func summary(for root: URL) -> AgentSummary? {
         let events = events(for: root)

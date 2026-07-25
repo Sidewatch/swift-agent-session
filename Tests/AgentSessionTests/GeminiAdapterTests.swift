@@ -154,6 +154,30 @@ final class GeminiAdapterTests: XCTestCase {
         XCTAssertNil(GeminiAdapter.editedPath(tool: "run_shell_command", args: ["command": "ls"]))
     }
 
+    // MARK: - Usage
+
+    func testUsageFromTokenSummaries() throws {
+        let record = """
+        {"sessionId":"s","projectHash":"a","startTime":"2026-07-26T10:00:00.000Z","messages":[
+         {"id":"m1","timestamp":"2026-07-26T10:00:00.000Z","type":"user","content":"go"},
+         {"id":"m2","timestamp":"2026-07-26T10:00:01.000Z","type":"gemini","content":"one",
+          "tokens":{"input":500,"output":100,"cached":0,"total":600}},
+         {"id":"m3","timestamp":"2026-07-26T10:00:02.000Z","type":"gemini","content":"two",
+          "tokens":{"input":900,"output":150,"cached":100,"total":1150}}
+        ]}
+        """
+        let root = try tempRoot(projectPath: "/tmp/usage", chats: [("s.json", record)])
+        let usage = try XCTUnwrap(GeminiAdapter(tempRoot: root).usage(for: URL(fileURLWithPath: "/tmp/usage")))
+        XCTAssertEqual(usage.contextTokens, 1150)   // latest exchange = the window fill
+        XCTAssertEqual(usage.outputTokens, 250)     // summed across the session
+        XCTAssertEqual(usage.contextLimit, 0)       // Gemini does not record the window
+    }
+
+    func testNoTokenSummariesMeansNoUsage() throws {
+        let root = try tempRoot(projectPath: "/tmp/usage", chats: [("s.json", wholeRecord)])
+        XCTAssertNil(GeminiAdapter(tempRoot: root).usage(for: URL(fileURLWithPath: "/tmp/usage")))
+    }
+
     // MARK: - Locating by .project_root marker
 
     func testFindsTheProjectByItsMarker() throws {

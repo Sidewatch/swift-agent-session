@@ -153,6 +153,37 @@ final class OpenCodeAdapterTests: XCTestCase {
         XCTAssertEqual(summary?.editedFiles, ["Sources/Uploader.swift"])
     }
 
+    // MARK: - Usage
+
+    func testUsageSumsCostAndOutputButTakesLatestContext() throws {
+        let storage = try storage(projectPath: "/tmp/usage", messages: conversation)
+        // Rewrite the assistant message with token metadata, in the nested shape OpenCode uses.
+        let file = storage.appendingPathComponent("message/ses_1/msg_002.json")
+        try #"""
+        {"id":"msg_002","role":"assistant","time":{"created":1785000005000},
+         "metadata":{"assistant":{"cost":0.0125,
+           "tokens":{"input":900,"output":250,"reasoning":10,"cache":{"read":100,"write":0}}}}}
+        """#.write(to: file, atomically: true, encoding: .utf8)
+
+        let usage = try XCTUnwrap(OpenCodeAdapter(storageRoot: storage)
+            .usage(for: URL(fileURLWithPath: "/tmp/usage")))
+        XCTAssertEqual(usage.contextTokens, 1260)   // 900 + 100 read + 250 out + 10 reasoning
+        XCTAssertEqual(usage.outputTokens, 250)
+        XCTAssertEqual(usage.costUSD, 0.0125, accuracy: 0.0001)  // recorded, not estimated
+        XCTAssertEqual(usage.contextLimit, 0)       // window unknown → percent reports 0
+    }
+
+    func testNoTokenMetadataMeansNoUsage() throws {
+        let storage = try storage(projectPath: "/tmp/usage", messages: conversation)
+        XCTAssertNil(OpenCodeAdapter(storageRoot: storage).usage(for: URL(fileURLWithPath: "/tmp/usage")))
+    }
+
+    func testTokensAreFoundAtEitherNesting() {
+        XCTAssertNotNil(OpenCodeAdapter.tokens(in: ["tokens": ["input": 1.0]]))
+        XCTAssertNotNil(OpenCodeAdapter.tokens(in: ["metadata": ["assistant": ["tokens": ["input": 1.0]]]]))
+        XCTAssertNil(OpenCodeAdapter.tokens(in: ["role": "user"]))
+    }
+
     // MARK: - Edit detection
 
     func testOnlyWritingToolsCountAsEdits() {
