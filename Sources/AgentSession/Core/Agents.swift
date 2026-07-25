@@ -19,7 +19,9 @@ public enum Agents {
     /// Every adapter known to the library, in detection order.
     public static let all: [AgentAdapter] = [
         ClaudeCodeAdapter(),
-        // CodexAdapter(), GeminiAdapter(), AiderAdapter(), OpenCodeAdapter() — add when verifiable.
+        CodexAdapter(),
+        // GeminiAdapter(), AiderAdapter(), OpenCodeAdapter() — add when their formats are read
+        // from source the way Codex's was.
     ]
 
     /// The first adapter that has a session for `root` (first match wins), or

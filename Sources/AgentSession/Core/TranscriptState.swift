@@ -24,7 +24,28 @@ import Foundation
 /// tentatively ingests an unterminated trailing line into the *copy*, so the
 /// served snapshot matches a full re-parse of the file as it stands right now
 /// without contaminating the accumulators future polls build on.
+/// Which agent's transcript dialect a ``TranscriptState`` is folding.
+///
+/// The incremental read machinery (stat, append-only offsets, durable state) is identical for
+/// every agent; only the per-line shape differs. Carrying the dialect here keeps one cache
+/// rather than one per adapter.
+enum TranscriptFormat {
+    /// Claude Code: `{type, message:{role, content:[…]}}`.
+    case claude
+    /// Codex CLI: `{timestamp, type, payload:{…}}` with an internally-tagged payload.
+    case codex
+}
+
 struct TranscriptState {
+
+    /// The dialect this state folds. Set once when the state is created.
+    let format: TranscriptFormat
+
+    /// - Parameter format: The agent dialect (default Claude Code). Explicit rather than
+    ///   memberwise, because the private accumulators below would make a synthesised init
+    ///   private and unreachable from the cache.
+    init(format: TranscriptFormat = .claude) { self.format = format }
+
 
     // MARK: - Usage accumulators
 
@@ -75,9 +96,95 @@ struct TranscriptState {
     /// (usage / events / summary) are updated from the single parse.
     mutating func ingest(lineData: Data) {
         guard let obj = (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any] else { return }
-        ingestUsage(obj)
-        ingestEvent(obj)
-        ingestSummary(obj)
+        switch format {
+        case .claude:
+            ingestUsage(obj)
+            ingestEvent(obj)
+            ingestSummary(obj)
+        case .codex:
+            ingestCodex(obj)
+        }
+    }
+
+    /// Folds one Codex rollout line.
+    ///
+    /// A line is `{"timestamp":…, "type":<tag>, "payload":{…}}` — Rust's
+    /// `#[serde(tag = "type", content = "payload")]`. Only `response_item` carries conversation
+    /// content, and its payload is itself internally tagged, so the shape is a tag inside a tag.
+    private mutating func ingestCodex(_ obj: [String: Any]) {
+        guard obj["type"] as? String == "response_item",
+              let payload = obj["payload"] as? [String: Any] else { return }
+        let ts = Self.shortTime(obj["timestamp"] as? String)
+
+        switch payload["type"] as? String {
+        case "message":
+            let role = payload["role"] as? String ?? ""
+            // Content is an array of tagged parts; the user's text arrives as `input_text` and
+            // the model's as `output_text`, so both are collected rather than assuming one.
+            let text = (payload["content"] as? [[String: Any]] ?? [])
+                .compactMap { $0["text"] as? String }
+                .joined(separator: " ")
+            guard !text.isEmpty else { return }
+            if role == "user" {
+                append(TimelineEvent(kind: .userPrompt, title: "You", detail: Self.firstLine(text),
+                                     filePath: nil, timestamp: ts))
+            } else if role == "assistant" {
+                append(TimelineEvent(kind: .assistantText, title: "Codex", detail: Self.firstLine(text),
+                                     filePath: nil, timestamp: ts))
+            }
+
+        case "function_call", "custom_tool_call":
+            let name = payload["name"] as? String ?? "tool"
+            // Arguments are a JSON *string*, not an object — it's the model's raw tool call.
+            let raw = (payload["arguments"] as? String) ?? (payload["input"] as? String) ?? ""
+            let path = Self.codexEditedPath(tool: name, arguments: raw)
+            let isEdit = path != nil
+            append(TimelineEvent(kind: isEdit ? .fileEdit : .toolUse, title: name,
+                                 detail: path ?? Self.firstLine(raw), filePath: path, timestamp: ts))
+            if let path { edited.insert(path) }
+
+        case "local_shell_call":
+            // The action holds the argv; render it like any other shell tool row.
+            let action = payload["action"] as? [String: Any] ?? [:]
+            let command = (action["command"] as? [String])?.joined(separator: " ")
+                ?? (action["command"] as? String) ?? "shell"
+            append(TimelineEvent(kind: .toolUse, title: "shell", detail: Self.firstLine(command),
+                                 filePath: nil, timestamp: ts))
+
+        default:
+            // reasoning, *_output, web_search_call, compaction… — no timeline row.
+            break
+        }
+    }
+
+    /// The file a Codex tool call wrote to, or `nil` when the call isn't an edit.
+    ///
+    /// Codex edits arrive either as a JSON argument object carrying a path, or as an
+    /// `apply_patch` envelope whose paths are in the patch body (`*** Update File: <path>`).
+    /// Both are handled; anything else is treated as a non-edit tool rather than guessed at.
+    static func codexEditedPath(tool: String, arguments: String) -> String? {
+        if let data = arguments.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["file_path", "path", "filename", "file"] {
+                if let value = object[key] as? String, !value.isEmpty { return value }
+            }
+            // apply_patch nests the patch text under `input`/`patch`.
+            for key in ["input", "patch"] {
+                if let body = object[key] as? String, let path = applyPatchPath(body) { return path }
+            }
+        }
+        return applyPatchPath(arguments)
+    }
+
+    /// The first path named by an `apply_patch` envelope.
+    private static func applyPatchPath(_ patch: String) -> String? {
+        for line in patch.split(separator: "\n") {
+            for marker in ["*** Update File: ", "*** Add File: ", "*** Delete File: "]
+            where line.hasPrefix(marker) {
+                return String(line.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
     }
 
     /// Updates the token/cost accumulators from one parsed line.

@@ -52,6 +52,13 @@ import Glibc
 ///   was not valid UTF-8 — JSONL is UTF-8 by spec, so this never mattered).
 final class TranscriptCache: @unchecked Sendable {
 
+    /// The transcript dialect this cache folds — see ``TranscriptFormat``.
+    private let format: TranscriptFormat
+
+    /// - Parameter format: The agent dialect (default Claude Code).
+    init(format: TranscriptFormat = .claude) { self.format = format }
+
+
     /// The results one poll serves — all three readers' values, materialized
     /// once per parse so usage/events/summary always come from the same bytes.
     struct Snapshot {
@@ -146,7 +153,7 @@ final class TranscriptCache: @unchecked Sendable {
             entry = e
         } else {
             entry = Entry(filePath: path, inode: inode, mtime: mtime, size: 0, offset: 0,
-                          durable: TranscriptState(), snapshot: .empty)
+                          durable: TranscriptState(format: format), snapshot: .empty)
         }
 
         // Read exactly [offset, size): the appended bytes, plus the prefix of an
