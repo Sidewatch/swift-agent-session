@@ -21,8 +21,9 @@ public enum Agents {
         ClaudeCodeAdapter(),
         CodexAdapter(),
         OpenCodeAdapter(),
-        // GeminiAdapter(), AiderAdapter() — add when their formats are read from source the way
-        // Codex's and OpenCode's were.
+        GeminiAdapter(),
+        // AiderAdapter(), GooseAdapter(), CrushAdapter() — add when their formats are read from
+        // source the way these were. Cursor is closed-source, so it can only ever be guessed at.
     ]
 
     /// The first adapter that has a session for `root` (first match wins), or

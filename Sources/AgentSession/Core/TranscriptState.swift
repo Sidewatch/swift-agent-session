@@ -365,7 +365,8 @@ struct TranscriptState {
 
     /// Transcript timestamps are UTC Zulu — convert to the viewer's local clock,
     /// falling back to the raw UTC HH:MM slice only if the string is unparseable.
-    private static func shortTime(_ iso: String?) -> String {
+    /// Internal (not private) so every adapter shares one time-rendering rule.
+    static func shortTime(_ iso: String?) -> String {
         guard let iso else { return "" }
         if let date = isoFractional.date(from: iso) ?? isoPlain.date(from: iso) {
             return localHHMM.string(from: date)
