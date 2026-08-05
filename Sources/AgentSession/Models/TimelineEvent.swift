@@ -16,10 +16,10 @@ import Foundation
 /// review surface can render any agent's activity identically. `Equatable`, so
 /// a polling surface can compare a fresh transcript read against what it last
 /// rendered and skip the rebuild when nothing changed.
-public struct TimelineEvent: Equatable {
+public struct TimelineEvent: Equatable, Sendable {
 
     /// The category of a timeline entry, which drives its glyph and styling.
-    public enum Kind {
+    public enum Kind: Sendable {
 
         /// A prompt typed by the human operator.
         case userPrompt

@@ -11,7 +11,7 @@
 import Foundation
 
 /// Token/cost telemetry for an agent session.
-public struct AgentUsage {
+public struct AgentUsage: Sendable {
 
     /// Tokens in the most recent context window.
     public let contextTokens: Int

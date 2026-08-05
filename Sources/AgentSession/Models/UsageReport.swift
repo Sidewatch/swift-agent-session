@@ -6,7 +6,7 @@ import Foundation
 /// counted once.
 public struct UsageReport: Equatable, Sendable {
     /// A cost/token subtotal for one grouping key (a model name or a project).
-    public struct Bucket: Equatable {
+    public struct Bucket: Equatable, Sendable {
         public let key: String
         public let costUSD: Double
         public let inputTokens: Int

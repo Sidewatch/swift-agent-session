@@ -19,7 +19,14 @@ import Foundation
 ///
 /// Deliberately time-bounded rather than invalidated: these adapters have no cheap change signal,
 /// and a second of staleness in a review feed costs nothing.
-final class SessionMemo<Value> {
+///
+/// `@unchecked Sendable` is an accurate claim rather than an escape hatch: every access to
+/// `entries` is already inside `lock`, and constraining `Value: Sendable` closes the other half
+/// — without it the memo would happily ferry a non-Sendable value across threads. Note the
+/// compute-outside-the-lock design means two threads racing the same cold key can both compute;
+/// that is deliberate (it keeps a slow directory walk from blocking every other caller) and
+/// harmless, since both produce the same answer and the later write simply wins.
+final class SessionMemo<Value: Sendable>: @unchecked Sendable {
     private struct Entry { let value: Value; let at: Date }
     private var entries: [String: Entry] = [:]
     private let lock = NSLock()
