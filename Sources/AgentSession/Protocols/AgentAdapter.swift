@@ -18,7 +18,7 @@ import Foundation
 ///
 /// - Note: Adapters read transcripts synchronously from disk — call off the main
 ///   thread when sessions may be large.
-public protocol AgentAdapter {
+public protocol AgentAdapter: Sendable {
 
     /// A human-readable name for the agent, e.g. `"Claude Code"`.
     var name: String { get }

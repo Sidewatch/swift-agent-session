@@ -61,7 +61,7 @@ final class TranscriptCache: @unchecked Sendable {
 
     /// The results one poll serves — all three readers' values, materialized
     /// once per parse so usage/events/summary always come from the same bytes.
-    struct Snapshot {
+    struct Snapshot: Sendable {
         /// What ``ClaudeCodeAdapter/usage(for:)`` returns.
         let usage: AgentUsage?
         /// What ``ClaudeCodeAdapter/events(for:)`` returns.

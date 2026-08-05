@@ -14,7 +14,8 @@ let package = Package(
         .library(name: "AgentSession", targets: ["AgentSession"]),
     ],
     targets: [
-        .target(name: "AgentSession", path: "Sources"),
+        .target(name: "AgentSession", path: "Sources",
+                swiftSettings: [.unsafeFlags(["-strict-concurrency=complete"])]),
         .testTarget(name: "AgentSessionTests", dependencies: ["AgentSession"], path: "Tests"),
     ]
 )

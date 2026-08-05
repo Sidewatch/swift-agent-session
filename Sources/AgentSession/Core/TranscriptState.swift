@@ -427,14 +427,17 @@ struct TranscriptState {
 
     /// ISO-8601 with fractional seconds ("2026-07-09T10:07:12.000Z") — the form
     /// Claude Code writes. Falls back to `isoPlain` for whole-second timestamps.
-    private static let isoFractional: ISO8601DateFormatter = {
+    // Apple documents ISO8601DateFormatter as safe for concurrent USE once configured; it
+    // is simply not annotated Sendable. Both of these are configured here and only ever
+    // read, so the assertion is about this usage, not the class in general.
+    private nonisolated(unsafe) static let isoFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
     /// Whole-second ISO-8601 fallback ("2026-07-09T10:07:12Z").
-    private static let isoPlain = ISO8601DateFormatter()
+    private nonisolated(unsafe) static let isoPlain = ISO8601DateFormatter()
 
     /// Renders a `Date` as `HH:mm` on the viewer's local clock.
     private static let localHHMM: DateFormatter = {
