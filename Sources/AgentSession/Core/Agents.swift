@@ -37,4 +37,22 @@ public enum Agents {
     static func active(for root: URL, in adapters: [AgentAdapter]) -> AgentAdapter? {
         adapters.first { $0.hasSession(for: root) }
     }
+
+    /// The first of `candidates`, in order, that some adapter has a session for —
+    /// with that adapter. Order candidates most specific first: the cwd of a
+    /// terminal running an agent (Claude Code files a transcript under its OWN cwd
+    /// at launch — whatever folder the shell happened to be in), then the opened
+    /// folder, its repo root, its parent. Looking up the opened folder alone found
+    /// nothing while an agent launched from a subfolder was working in plain sight.
+    public static func resolve(candidates: [URL]) -> (adapter: AgentAdapter, root: URL)? {
+        resolve(candidates: candidates, in: all)
+    }
+
+    /// Test seam for ``resolve(candidates:)`` over an explicit adapter list.
+    static func resolve(candidates: [URL], in adapters: [AgentAdapter]) -> (adapter: AgentAdapter, root: URL)? {
+        for root in candidates {
+            if let adapter = active(for: root, in: adapters) { return (adapter, root) }
+        }
+        return nil
+    }
 }
