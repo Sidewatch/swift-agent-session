@@ -7,10 +7,10 @@ import Foundation
 /// resets. `seven_day_opus` / `seven_day_sonnet` are the per-model weekly caps and
 /// are often absent/null. Parsing is lenient: any window that isn't a well-formed
 /// object with a numeric `utilization` is simply dropped.
-public struct ClaudeQuota: Equatable {
+public struct ClaudeQuota: Sendable, Equatable {
 
     /// One rolling window: how much of it is used, and when it resets.
-    public struct Window: Equatable {
+    public struct Window: Sendable, Equatable {
         /// Percent of the window consumed, 0–100.
         public let utilization: Double
         /// When the window rolls over, if the endpoint provided it.
@@ -29,7 +29,7 @@ public struct ClaudeQuota: Equatable {
 
     /// One window with the endpoint's key it arrived under (`"five_hour"`,
     /// `"seven_day_opus"`, `"seven_day_fable"`, …).
-    public struct NamedWindow: Equatable {
+    public struct NamedWindow: Sendable, Equatable {
         /// The endpoint's JSON key for this window.
         public let key: String
         /// The window's usage.
