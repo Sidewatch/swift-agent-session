@@ -73,7 +73,7 @@ final class TranscriptCache: @unchecked Sendable {
     }
 
     /// Cached incremental state for one project root's current transcript.
-    private struct Entry {
+    struct Entry {
         /// The transcript path this entry mirrors (rotation detection).
         var filePath: String
         /// The transcript's inode (atomic rewrites replace the file → new inode).
@@ -90,6 +90,7 @@ final class TranscriptCache: @unchecked Sendable {
         /// The memoized results (durable state + tentative trailing line).
         var snapshot: Snapshot
     }
+
 
     /// Guards all mutable state below. `NSLock` (non-reentrant) is sufficient:
     /// there is a single locked entry point and no nested locking.
@@ -123,73 +124,46 @@ final class TranscriptCache: @unchecked Sendable {
     ///   re-parse of the file's current contents would produce.
     func results(for root: URL, file: URL?) -> Snapshot {
         lock.lock(); defer { lock.unlock() }
-
         let key = root.path
-        guard let file else {
+        guard let file, let stat = FileStat(path: file.path) else {
             entries[key] = nil
             return .empty
         }
-        let path = file.path
-        guard let att = try? FileManager.default.attributesOfItem(atPath: path) else {
+        // Fast path: nothing observable changed → the memoized snapshot, zero file reads.
+        if let e = entries[key], e.isUnchanged(file.path, stat) { return e.snapshot }
+
+        var entry = entries[key].flatMap { $0.isPureAppend(file.path, stat) ? $0 : nil }
+            ?? Entry(filePath: file.path, inode: stat.inode, mtime: stat.mtime, size: 0, offset: 0,
+                     durable: TranscriptState(format: format), snapshot: .empty)
+        // Read exactly [offset, size): the appended bytes plus the prefix of an unterminated line
+        // carried over from the previous poll. Bytes appended after our stat wait for the next poll.
+        guard let appended = readAppended(path: file.path, entry: entry, size: stat.size) else {
             entries[key] = nil
             return .empty
         }
-        let size = (att[.size] as? NSNumber)?.uint64Value ?? 0
-        let mtime = att[.modificationDate] as? Date
-        let inode = (att[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
-
-        // Fast path: nothing observable changed → serve the memoized snapshot
-        // with zero file reads. This is the steady-state poll.
-        if let e = entries[key], e.filePath == path, e.inode == inode,
-           e.size == size, e.mtime == mtime {
-            return e.snapshot
-        }
-
-        // Reuse the durable state only for a pure append to the very same file;
-        // anything else (rotation, atomic rewrite, shrink, same-size mtime
-        // change) starts over and re-parses the whole file once.
-        var entry: Entry
-        if let e = entries[key], e.filePath == path, e.inode == inode, size > e.size {
-            entry = e
-        } else {
-            entry = Entry(filePath: path, inode: inode, mtime: mtime, size: 0, offset: 0,
-                          durable: TranscriptState(format: format), snapshot: .empty)
-        }
-
-        // Read exactly [offset, size): the appended bytes, plus the prefix of an
-        // unterminated line carried over from the previous poll (offset stays at
-        // its start until it completes). Bytes appended after our stat wait for
-        // the next poll, keeping this pass internally consistent.
-        var appended = Data()
-        if size > entry.offset {
-            guard let data = read(path: path, from: entry.offset, count: Int(size - entry.offset)) else {
-                entries[key] = nil
-                return .empty
-            }
-            appended = data
-        }
-
-        // Fold every complete (newline-terminated) line into the durable state.
-        let completeEnd = appended.lastIndex(of: 0x0A).map { appended.index(after: $0) } ?? appended.startIndex
-        for line in appended[appended.startIndex..<completeEnd].split(separator: 0x0A) where !line.isEmpty {
-            entry.durable.ingest(lineData: Data(line))   // rebase the slice's indices
-        }
-        let tail = appended[completeEnd...]
-
-        entry.offset += UInt64(appended.distance(from: appended.startIndex, to: completeEnd))
+        let (lines, tail) = appended.completeLinesAndTail
+        for line in lines { entry.durable.ingest(lineData: line) }
+        entry.offset += UInt64(appended.count - tail.count)
         entry.size = entry.offset + UInt64(tail.count)
-        entry.mtime = mtime
-        entry.inode = inode
-
-        // Materialize the snapshot from the durable state plus a tentative parse
-        // of the unterminated tail (a full re-parse would see that line too).
-        var served = entry.durable
-        if !tail.isEmpty { served.ingest(lineData: Data(tail)) }
-        entry.snapshot = Snapshot(usage: served.usageResult,
-                                  events: served.eventsResult,
-                                  summary: served.summaryResult)
+        entry.mtime = stat.mtime
+        entry.inode = stat.inode
+        entry.snapshot = Self.snapshot(durable: entry.durable, tail: tail)
         entries[key] = entry
         return entry.snapshot
+    }
+
+    /// The bytes appended since `entry.offset`, or empty when nothing was; nil when unreadable.
+    private func readAppended(path: String, entry: Entry, size: UInt64) -> Data? {
+        guard size > entry.offset else { return Data() }
+        return read(path: path, from: entry.offset, count: Int(size - entry.offset))
+    }
+
+    /// The durable state plus a tentative parse of the unterminated tail — what a full re-parse
+    /// would see too.
+    private static func snapshot(durable: TranscriptState, tail: Data) -> Snapshot {
+        var served = durable
+        if !tail.isEmpty { served.ingest(lineData: tail) }
+        return Snapshot(usage: served.usageResult, events: served.eventsResult, summary: served.summaryResult)
     }
 
     // MARK: - Raw file access
@@ -227,5 +201,17 @@ final class TranscriptCache: @unchecked Sendable {
         bytes += filled
         if filled < count { data.removeSubrange(filled..<count) }
         return data
+    }
+}
+
+extension TranscriptCache.Entry {
+    /// Same file, same inode, same size and mtime: the steady-state poll.
+    func isUnchanged(_ path: String, _ stat: FileStat) -> Bool {
+        filePath == path && inode == stat.inode && size == stat.size && mtime == stat.mtime
+    }
+    /// The very same file grew: the durable state can be reused. Anything else (rotation,
+    /// atomic rewrite, shrink, same-size mtime change) starts over.
+    func isPureAppend(_ path: String, _ stat: FileStat) -> Bool {
+        filePath == path && inode == stat.inode && stat.size > size
     }
 }

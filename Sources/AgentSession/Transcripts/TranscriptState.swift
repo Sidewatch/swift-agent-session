@@ -98,76 +98,73 @@ struct TranscriptState {
     private mutating func ingestCodex(_ obj: [String: Any]) {
         guard let payload = obj["payload"] as? [String: Any] else { return }
         let ts = Self.shortTime(obj["timestamp"] as? String)
+        switch obj["type"] as? String {
+        case "event_msg":      ingestCodexEvent(payload, ts)
+        case "response_item":  ingestCodexResponseItem(payload, ts)
+        default:               break
+        }
+    }
 
-        // Codex records conversation through TWO channels, and which one it uses depends on the
-        // path taken. `event_msg` carries user_message / agent_message with the text directly;
-        // Codex's own recorder tests write a user prompt this way. Ignoring it meant a session
-        // could yield ZERO user prompts — and since turns segment on user prompts, zero turns,
-        // hence no checkpoints and no turn review at all.
-        if obj["type"] as? String == "event_msg" {
-            // Codex reports token usage — and, uniquely, the model's context window — in its own
-            // event stream rather than on each message, so it is read here before the text cases.
-            if payload["type"] as? String == "token_count" {
-                ingestCodexTokens(payload["info"] as? [String: Any])
-                return
-            }
-            guard let message = payload["message"] as? String,
-                  !message.trimmed.isEmpty else { return }
-            switch payload["type"] as? String {
-            case "user_message":
-                appendCodexUser(message, ts)
-            case "agent_message":
-                appendCodexAssistant(message, ts)
-            default:
-                break
-            }
+    /// `event_msg`: user_message / agent_message carry text directly (Codex's own recorder
+    /// tests write a prompt this way — ignoring it meant zero turns), and `token_count` is
+    /// the one place Codex reports usage and the model's context window.
+    private mutating func ingestCodexEvent(_ payload: [String: Any], _ ts: String) {
+        if payload["type"] as? String == "token_count" {
+            ingestCodexTokens(payload["info"] as? [String: Any])
             return
         }
+        guard let message = payload["message"] as? String, !message.trimmed.isEmpty else { return }
+        switch payload["type"] as? String {
+        case "user_message":  appendCodexUser(message, ts)
+        case "agent_message": appendCodexAssistant(message, ts)
+        default:              break
+        }
+    }
 
-        guard obj["type"] as? String == "response_item" else { return }
-
+    /// `response_item`: an internally tagged payload — a message, a tool call, or a shell call.
+    private mutating func ingestCodexResponseItem(_ payload: [String: Any], _ ts: String) {
         switch payload["type"] as? String {
         case "message":
-            let role = payload["role"] as? String ?? ""
-            // Content is an array of tagged parts; the user's text arrives as `input_text` and
-            // the model's as `output_text`, so both are collected rather than assuming one.
-            let text = (payload["content"] as? [[String: Any]] ?? [])
-                .compactMap { $0["text"] as? String }
-                .joined(separator: " ")
+            let text = Self.codexMessageText(payload)
             guard !text.isEmpty else { return }
-            if role == "user" {
-                appendCodexUser(text, ts)
-            } else if role == "assistant" {
-                appendCodexAssistant(text, ts)
+            switch payload["role"] as? String {
+            case "user":      appendCodexUser(text, ts)
+            case "assistant": appendCodexAssistant(text, ts)
+            default:          break
             }
-
         case "function_call", "custom_tool_call":
-            // A tool call between two identical prompts means they are not adjacent.
-            lastCodexUserText = nil
-            lastCodexAssistantText = nil
+            forgetAdjacentCodexText()   // a tool call between two identical prompts means they are not adjacent
             let name = payload["name"] as? String ?? "tool"
-            // Arguments are a JSON *string*, not an object — it's the model's raw tool call.
+            // Arguments are a JSON *string*, not an object — the model's raw tool call.
             let raw = (payload["arguments"] as? String) ?? (payload["input"] as? String) ?? ""
             let path = Self.codexEditedPath(tool: name, arguments: raw)
-            let isEdit = path != nil
-            append(TimelineEvent(kind: isEdit ? .fileEdit : .toolUse, title: name,
+            append(TimelineEvent(kind: path == nil ? .toolUse : .fileEdit, title: name,
                                  detail: path ?? Self.firstLine(raw), filePath: path, timestamp: ts))
             if let path { edited.insert(path) }
-
         case "local_shell_call":
-            lastCodexUserText = nil
-            lastCodexAssistantText = nil
-            // The action holds the argv; render it like any other shell tool row.
-            let action = payload["action"] as? [String: Any] ?? [:]
-            let command = (action["command"] as? [String])?.joined(separator: " ")
-                ?? (action["command"] as? String) ?? "shell"
-            append(TimelineEvent(kind: .toolUse, title: "shell", detail: Self.firstLine(command),
+            forgetAdjacentCodexText()
+            append(TimelineEvent(kind: .toolUse, title: "shell", detail: Self.firstLine(Self.codexShellCommand(payload)),
                                  filePath: nil, timestamp: ts))
-
         default:
-            // reasoning, *_output, web_search_call, compaction… — no timeline row.
-            break
+            break   // reasoning, *_output, web_search_call, compaction… — no timeline row
         }
+    }
+
+    /// The user's text arrives as `input_text` parts and the model's as `output_text`; both
+    /// are collected rather than assuming one.
+    private static func codexMessageText(_ payload: [String: Any]) -> String {
+        (payload["content"] as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }.joined(separator: " ")
+    }
+
+    /// The shell action's argv as one line, or "shell".
+    private static func codexShellCommand(_ payload: [String: Any]) -> String {
+        let action = payload["action"] as? [String: Any] ?? [:]
+        return (action["command"] as? [String])?.joined(separator: " ") ?? (action["command"] as? String) ?? "shell"
+    }
+
+    private mutating func forgetAdjacentCodexText() {
+        lastCodexUserText = nil
+        lastCodexAssistantText = nil
     }
 
     /// Folds a Codex `token_count` payload into the usage accumulators.
