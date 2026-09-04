@@ -60,10 +60,8 @@ public struct ClaudeCodeAdapter: AgentAdapter {
     /// The `~/.claude/projects/<encoded-cwd>` directory for `root`, or `nil` when
     /// Claude Code has never run there.
     func projectDir(for root: URL) -> URL? {
-        // Claude Code uses an ASCII-only `[^a-zA-Z0-9]→-` rule; Character.isLetter is
-        // Unicode-aware and would keep accented/non-Latin chars, diverging on those paths.
-        let encoded = String(root.path.map { ($0.isASCII && ($0.isLetter || $0.isNumber)) ? $0 : "-" })
-        let dir = projectsRoot.appendingPathComponent(encoded, isDirectory: true)
+        // ONE encoding for the package: the measured per-UTF-16-unit fold in ClaudeSessionIndex.
+        let dir = projectsRoot.appendingPathComponent(ClaudeSessionIndex.encode(root), isDirectory: true)
         return dir.isExistingDirectory ? dir : nil
     }
 
