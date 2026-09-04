@@ -9,6 +9,7 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 ## Module map
 
 - `Adapters/` — the engine: adapters: Agents, ClaudeCodeAdapter, CodexAdapter, GeminiAdapter, OpenCodeAdapter
+- `Extensions/` — one extension per Foundation idiom: Int+CompactCount
 - `Models/` — value types — the shape of a thing, nothing else: AgentSummary, AgentUsage, ClaudeCredentials, ClaudeQuota, ClaudeQuota+Display, TimelineEvent, TurnBoundary, UsageReport
 - `Protocols/` — protocols the module exposes: AgentAdapter
 - `Transcripts/` — the engine: transcripts: SessionMemo, TranscriptCache, TranscriptState
