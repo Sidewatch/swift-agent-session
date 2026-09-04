@@ -64,23 +64,14 @@ public struct ClaudeCodeAdapter: AgentAdapter {
         // Unicode-aware and would keep accented/non-Latin chars, diverging on those paths.
         let encoded = String(root.path.map { ($0.isASCII && ($0.isLetter || $0.isNumber)) ? $0 : "-" })
         let dir = projectsRoot.appendingPathComponent(encoded, isDirectory: true)
-        var isDir: ObjCBool = false
-        return (FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) && isDir.boolValue) ? dir : nil
+        return dir.isExistingDirectory ? dir : nil
     }
 
     /// The most recently modified `.jsonl` transcript in the project directory —
     /// "the current session" — or `nil` when there is none.
     func latestSessionFile(for root: URL) -> URL? {
-        guard let dir = projectDir(for: root),
-              let files = try? FileManager.default.contentsOfDirectory(
-                at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
-        return files.filter { $0.pathExtension == "jsonl" }
-            .max { (mod($0) ?? .distantPast) < (mod($1) ?? .distantPast) }
-    }
-
-    /// The file's content-modification date, or `nil` when unreadable.
-    private func mod(_ u: URL) -> Date? {
-        (try? u.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        guard let dir = projectDir(for: root) else { return nil }
+        return Files.newest(in: dir, extensions: ["jsonl"])
     }
 
     // MARK: - Readers (served from the incremental cache)

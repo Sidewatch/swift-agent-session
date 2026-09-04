@@ -107,18 +107,12 @@ public final class GeminiAdapter: AgentAdapter {
     /// is a metadata line followed by one record per line. Both are accepted by shape rather than
     /// by extension, because the same directory holds both and an install can be mid-migration.
     static func messages(in data: Data) -> [[String: Any]] {
-        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let messages = object["messages"] as? [[String: Any]] {
+        if let object = JSONFile.object(from: data), let messages = object["messages"] as? [[String: Any]] {
             return messages
         }
         guard let text = String(data: data, encoding: .utf8) else { return [] }
-        return text.split(separator: "\n").compactMap { line in
-            guard let lineData = line.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
-            else { return nil }
-            // The leading metadata record carries sessionId but no type — skip it.
-            return object["type"] == nil ? nil : object
-        }
+        // The leading metadata record carries sessionId but no type — skip it.
+        return JSONFile.lines(in: text).filter { $0["type"] != nil }
     }
 
     /// The timeline rows for one message record.
@@ -235,14 +229,7 @@ public final class GeminiAdapter: AgentAdapter {
 
     /// The most recently modified chat file for `root`.
     func latestChatFile(for root: URL) -> URL? {
-        guard let dir = projectDir(for: root)?.appendingPathComponent("chats", isDirectory: true),
-              let files = try? FileManager.default.contentsOfDirectory(
-                at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
-        return files.filter { $0.pathExtension == "json" || $0.pathExtension == "jsonl" }
-            .max { (Self.modified($0) ?? .distantPast) < (Self.modified($1) ?? .distantPast) }
-    }
-
-    private static func modified(_ url: URL) -> Date? {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        guard let dir = projectDir(for: root)?.appendingPathComponent("chats", isDirectory: true) else { return nil }
+        return Files.newest(in: dir, extensions: ["json", "jsonl"])
     }
 }

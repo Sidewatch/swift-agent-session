@@ -85,7 +85,7 @@ public final class OpenCodeAdapter: AgentAdapter {
 
         var context = 0, output = 0, cost = 0.0, sawAny = false
         for file in files.filter({ $0.pathExtension == "json" }).sorted(by: { $0.path < $1.path }) {
-            guard let message = Self.json(at: file), let tokens = Self.tokens(in: message) else { continue }
+            guard let message = JSONFile.object(at: file), let tokens = Self.tokens(in: message) else { continue }
             sawAny = true
             let input = (tokens["input"] as? Double ?? 0)
                 + ((tokens["cache"] as? [String: Any])?["read"] as? Double ?? 0)
@@ -150,7 +150,7 @@ public final class OpenCodeAdapter: AgentAdapter {
         // Message ids are monotonic, so sorting by filename restores conversation order without
         // reading every file first.
         for messageFile in messageFiles.filter({ $0.pathExtension == "json" }).sorted(by: { $0.path < $1.path }) {
-            guard let message = Self.json(at: messageFile) else { continue }
+            guard let message = JSONFile.object(at: messageFile) else { continue }
             let role = message["role"] as? String ?? ""
             let time = Self.time(message)
             let messageID = message["id"] as? String ?? messageFile.deletingPathExtension().lastPathComponent
@@ -170,7 +170,7 @@ public final class OpenCodeAdapter: AgentAdapter {
 
         var events: [TimelineEvent] = []
         for partFile in partFiles.filter({ $0.pathExtension == "json" }).sorted(by: { $0.path < $1.path }) {
-            guard let part = json(at: partFile) else { continue }
+            guard let part = JSONFile.object(at: partFile) else { continue }
             switch part["type"] as? String {
             case "text":
                 guard let text = part["text"] as? String,
@@ -232,7 +232,7 @@ public final class OpenCodeAdapter: AgentAdapter {
         guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
         else { return [] }
         return files.filter { $0.pathExtension == "json" }.compactMap { file in
-            guard let object = Self.json(at: file) else { return nil }
+            guard let object = JSONFile.object(at: file) else { return nil }
             let matches = object.values.contains { value in
                 guard let path = value as? String, path.hasPrefix("/") else { return false }
                 return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path == target
@@ -249,46 +249,18 @@ public final class OpenCodeAdapter: AgentAdapter {
                 at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         }
         let newest = sessionIDs.filter { $0.pathExtension == "json" }
-            .max { (Self.modified($0) ?? .distantPast) < (Self.modified($1) ?? .distantPast) }
+            .max { ($0.modificationDate ?? .distantPast) < ($1.modificationDate ?? .distantPast) }
         guard let sessionID = newest?.deletingPathExtension().lastPathComponent else { return nil }
         let messages = storageRoot.appendingPathComponent("message/\(sessionID)", isDirectory: true)
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: messages.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else { return nil }
-        return messages
+        return messages.isExistingDirectory ? messages : nil
     }
 
-    // MARK: - Helpers
-
-    private static func json(at url: URL) -> [String: Any]? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    }
-
-    /// `HH:mm` in a fixed locale.
-    ///
-    /// A `DateFormatter` with an explicit `dateFormat` still honours the user's locale, so under
-    /// a 12-hour region the pattern is rewritten and OpenCode rows would render differently from
-    /// every other adapter's. `en_US_POSIX` pins it. Built once — DateFormatter is expensive.
-    private static let hhmm: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-
-    private static func modified(_ url: URL) -> Date? {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-    }
-
-    /// `HH:MM` for a message, from whichever time field it carries.
-    ///
-    /// OpenCode records epoch **milliseconds** (nested under `time.created` on newer records),
-    /// not an ISO string — treating it as seconds would date every row to 1970.
+    /// `HH:MM` for a message, from whichever time field it carries: epoch milliseconds, nested
+    /// under `time.created` on newer records.
     private static func time(_ message: [String: Any]) -> String {
         let millis = (message["time"] as? [String: Any])?["created"] as? Double
             ?? message["created"] as? Double
         guard let millis else { return "" }
-        return Self.hhmm.string(from: Date(timeIntervalSince1970: millis / 1000))
+        return ClockFormat.hhmm(Date(epochMilliseconds: millis))
     }
 }

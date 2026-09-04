@@ -115,36 +115,12 @@ public final class CodexAdapter: AgentAdapter {
     /// Only the head of the file is read: `cwd` appears near the top, and a rollout can grow to
     /// megabytes, so matching a project must not cost a full parse per candidate file.
     static func recordedCWD(in file: URL) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
-        defer { try? handle.close() }
-        // `readData(ofLength:)` rather than `read(upToCount:)`: the package deploys to
-        // macOS 10.15, and the throwing variant is 10.15.4+.
-        let head = handle.readData(ofLength: 64 * 1024)
-        // A fixed byte cut can land inside a multi-byte sequence, and strict UTF-8 decoding then
-        // returns nil for the WHOLE head — losing cwd even though it sits on line 1. Drop the
-        // trailing partial character rather than the file.
-        guard let text = Self.lenientUTF8(head) else { return nil }
-        for line in text.split(separator: "\n") {
-            guard let data = line.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let payload = object["payload"] as? [String: Any] else { continue }
+        guard let text = FileHead.text(of: file) else { return nil }
+        for object in JSONFile.lines(in: text) {
+            guard let payload = object["payload"] as? [String: Any] else { continue }
             // `turn_context` carries it directly; `session_meta` nests it under `meta`.
             if let cwd = payload["cwd"] as? String { return cwd }
             if let meta = payload["meta"] as? [String: Any], let cwd = meta["cwd"] as? String { return cwd }
-        }
-        return nil
-    }
-
-    /// Decodes `data` as UTF-8, discarding a truncated final character rather than failing.
-    ///
-    /// The head read is a fixed byte count, so it can land inside a multi-byte sequence. Strict
-    /// decoding then returns nil for the WHOLE buffer, which would lose `cwd` even when it sits
-    /// on line 1 — and the session would be permanently invisible to the app.
-    static func lenientUTF8(_ data: Data) -> String? {
-        if let text = String(data: data, encoding: .utf8) { return text }
-        // A UTF-8 sequence is at most 4 bytes, so at most 3 trailing bytes can be partial.
-        for drop in 1...3 where data.count > drop {
-            if let text = String(data: data.dropLast(drop), encoding: .utf8) { return text }
         }
         return nil
     }

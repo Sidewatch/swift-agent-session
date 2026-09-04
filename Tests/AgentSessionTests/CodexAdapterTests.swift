@@ -165,8 +165,8 @@ final class CodexAdapterTests: XCTestCase {
         // whole head, losing cwd and making the session permanently invisible.
         var data = Data("x".utf8)
         data.append(contentsOf: Array("é".utf8).dropLast())   // truncated 2-byte sequence
-        XCTAssertEqual(CodexAdapter.lenientUTF8(data), "x")
-        XCTAssertEqual(CodexAdapter.lenientUTF8(Data("clean".utf8)), "clean")
+        XCTAssertEqual(data.lenientUTF8String, "x")
+        XCTAssertEqual(Data("clean".utf8).lenientUTF8String, "clean")
     }
 
     func testDistinctPromptsAreNotCollapsed() throws {

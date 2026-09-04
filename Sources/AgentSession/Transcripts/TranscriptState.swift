@@ -440,21 +440,13 @@ struct TranscriptState {
     private nonisolated(unsafe) static let isoPlain = ISO8601DateFormatter()
 
     /// Renders a `Date` as `HH:mm` on the viewer's local clock.
-    private static let localHHMM: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-
     /// Transcript timestamps are UTC Zulu — convert to the viewer's local clock,
     /// falling back to the raw UTC HH:MM slice only if the string is unparseable.
     /// Internal (not private) so every adapter shares one time-rendering rule.
     static func shortTime(_ iso: String?) -> String {
         guard let iso else { return "" }
         if let date = isoFractional.date(from: iso) ?? isoPlain.date(from: iso) {
-            return localHHMM.string(from: date)
+            return ClockFormat.hhmm(date)
         }
         guard let tPart = iso.split(separator: "T").dropFirst().first else { return "" }
         return String(tPart.prefix(5))
