@@ -174,7 +174,7 @@ public final class OpenCodeAdapter: AgentAdapter {
             switch part["type"] as? String {
             case "text":
                 guard let text = part["text"] as? String,
-                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                      !text.trimmed.isEmpty else { continue }
                 events.append(TimelineEvent(kind: role == "user" ? .userPrompt : .assistantText,
                                             title: role == "user" ? "You" : "OpenCode",
                                             detail: TranscriptState.firstLine(text),

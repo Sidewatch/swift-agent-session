@@ -87,7 +87,7 @@ public struct ClaudeQuota: Sendable, Equatable {
     /// endpoint adds per-model caps over time (Opus, Sonnet, Fable, …) and they
     /// should surface without a parser change.
     public static func parse(_ data: Data) -> ClaudeQuota? {
-        guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+        guard let obj = JSONFile.object(from: data) else { return nil }
         func window(_ value: Any) -> Window? {
             guard let w = value as? [String: Any],
                   let util = (w["utilization"] as? NSNumber)?.doubleValue else { return nil }

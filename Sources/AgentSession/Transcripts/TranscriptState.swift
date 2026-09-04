@@ -79,7 +79,7 @@ struct TranscriptState {
     /// or non-object lines are skipped, never fatal. All three result streams
     /// (usage / events / summary) are updated from the single parse.
     mutating func ingest(lineData: Data) {
-        guard let obj = (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any] else { return }
+        guard let obj = JSONFile.object(from: lineData) else { return }
         switch format {
         case .claude:
             ingestUsage(obj)
@@ -112,7 +112,7 @@ struct TranscriptState {
                 return
             }
             guard let message = payload["message"] as? String,
-                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                  !message.trimmed.isEmpty else { return }
             switch payload["type"] as? String {
             case "user_message":
                 appendCodexUser(message, ts)
@@ -219,7 +219,7 @@ struct TranscriptState {
     /// Both are handled; anything else is treated as a non-edit tool rather than guessed at.
     static func codexEditedPath(tool: String, arguments: String) -> String? {
         if let data = arguments.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+           let object = JSONFile.object(from: data) {
             for key in ["file_path", "path", "filename", "file"] {
                 if let value = object[key] as? String, !value.isEmpty { return value }
             }
@@ -282,7 +282,7 @@ struct TranscriptState {
             for block in arr {
                 switch block["type"] as? String {
                 case "text":
-                    if let t = (block["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                    if let t = (block["text"] as? String)?.trimmed, !t.isEmpty {
                         append(TimelineEvent(kind: .assistantText, title: "Claude", detail: Self.firstLine(t), filePath: nil, timestamp: ts))
                     }
                 case "tool_use":

@@ -13,7 +13,7 @@ public enum ClaudeCredentials {
     /// Pulls the `sk-ant-…` access token out of the Keychain item data, or nil if the
     /// bytes carry no recognizable token.
     public static func accessToken(fromKeychainData data: Data) -> String? {
-        if let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+        if let obj = JSONFile.object(from: data) {
             // Nested (Claude Code's shape) …
             if let oauth = obj["claudeAiOauth"] as? [String: Any],
                let token = oauth["accessToken"] as? String, !token.isEmpty {
@@ -24,7 +24,7 @@ public enum ClaudeCredentials {
             return nil
         }
         // Bare token stored directly.
-        if let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let s = data.utf8String?.trimmed,
            s.hasPrefix("sk-ant") {
             return s
         }

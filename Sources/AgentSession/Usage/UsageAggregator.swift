@@ -50,7 +50,7 @@ public enum UsageAggregator {
                 for lineData in splitLines(data) {
                     // Cheap gate: only usage-bearing lines are worth JSON-parsing.
                     guard lineData.range(of: usageMarker) != nil else { continue }
-                    guard let obj = (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any],
+                    guard let obj = JSONFile.object(from: lineData),
                           let msg = obj["message"] as? [String: Any],
                           let usage = msg["usage"] as? [String: Any] else { continue }
 

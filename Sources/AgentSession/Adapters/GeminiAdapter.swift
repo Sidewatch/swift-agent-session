@@ -110,7 +110,7 @@ public final class GeminiAdapter: AgentAdapter {
         if let object = JSONFile.object(from: data), let messages = object["messages"] as? [[String: Any]] {
             return messages
         }
-        guard let text = String(data: data, encoding: .utf8) else { return [] }
+        guard let text = data.utf8String else { return [] }
         // The leading metadata record carries sessionId but no type — skip it.
         return JSONFile.lines(in: text).filter { $0["type"] != nil }
     }
@@ -161,7 +161,7 @@ public final class GeminiAdapter: AgentAdapter {
     /// open a new TURN, so checkpoints and turn diffs would be cut at boundaries the human never
     /// created.
     static func isIgnoredUserContent(_ content: String) -> Bool {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = content.trimmed
         return trimmed.isEmpty
             || trimmed.hasPrefix("/")
             || trimmed.hasPrefix("?")
@@ -218,7 +218,7 @@ public final class GeminiAdapter: AgentAdapter {
         for dir in dirs {
             let marker = dir.appendingPathComponent(".project_root")
             guard let owner = try? String(contentsOf: marker, encoding: .utf8) else { continue }
-            let path = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+            let path = owner.trimmed
             if !path.isEmpty,
                URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path == target {
                 return dir
