@@ -44,3 +44,21 @@ final class UsageStreaksTests: XCTestCase {
         XCTAssertEqual(UsageAggregator.streaks([day(0)]).longest, 1)
     }
 }
+
+final class UsageReportDedupeTests: XCTestCase {
+    /// Claude writes a response line more than once when a turn is retried; the same
+    /// `message.id` must be counted once, or the bill doubles.
+    func testDuplicateResponseLinesCountOnce() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("usage-\(UUID().uuidString)")
+        let proj = root.appendingPathComponent("-Users-x-dev-app")
+        try FileManager.default.createDirectory(at: proj, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let line = #"{"timestamp":"2026-09-05T10:00:00Z","requestId":"req-1","message":{"id":"msg-1","model":"claude-sonnet-4-5","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}"#
+        let other = line.replacingOccurrences(of: "msg-1", with: "msg-2").replacingOccurrences(of: "req-1", with: "req-2")
+        try (line + "\n" + line + "\n" + other + "\n").write(to: proj.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
+        let report = UsageAggregator.report(projectsRoot: root)
+        XCTAssertEqual(report.messageCount, 2, "three lines, two distinct ids")
+        XCTAssertEqual(report.inputTokens, 200)
+        XCTAssertEqual(report.outputTokens, 100)
+    }
+}
