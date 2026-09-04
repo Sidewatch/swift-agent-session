@@ -82,6 +82,12 @@ struct MyAgentAdapter: AgentAdapter {
 - Costs are **estimates** from approximate per-model list prices (Opus / Haiku / Sonnet-default tiers); repeated JSONL lines for the same API response are counted once.
 - The parser is defensive: malformed, truncated, or garbage lines are skipped, never fatal.
 
+## For agents
+
+Read `CONTRIBUTING.md` first: the folder layout and the PR rules. `swift test` is the whole
+check, and a new test must fail before the change it covers. `CLAUDE.md` / `AGENTS.md` carry a
+module map.
+
 ## License
 
 MIT
