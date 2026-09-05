@@ -11,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `UsageStreaks`: day-by-day activity streaks computed in the local time zone,
+/// including the empty case.
 final class UsageStreaksTests: XCTestCase {
 
     private func day(_ offset: Int) -> String {
@@ -55,6 +57,8 @@ final class UsageStreaksTests: XCTestCase {
     }
 }
 
+/// Pins that a response line Claude wrote twice (a retried turn, same `message.id`) is counted
+/// once in the usage report.
 final class UsageReportDedupeTests: XCTestCase {
     /// Claude writes a response line more than once when a turn is retried; the same
     /// `message.id` must be counted once, or the bill doubles.

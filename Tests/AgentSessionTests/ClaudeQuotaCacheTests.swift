@@ -17,6 +17,8 @@ private final class Counter: @unchecked Sendable {
     var value: Int { lock.lock(); defer { lock.unlock() }; return n }
 }
 
+/// Tests for `ClaudeQuotaCache`: fetches are shared and rate-limited, `force` bypasses the
+/// cache, and a missing token yields nil without a fetch.
 final class ClaudeQuotaCacheTests: XCTestCase {
     private static func quota(_ n: Int) -> ClaudeQuota? {
         ClaudeQuota.parse("{\"five_hour\":{\"utilization\":\(n),\"resets_at\":\"2026-01-01T00:00:00Z\"}}")

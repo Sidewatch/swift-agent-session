@@ -10,6 +10,9 @@
 
 import Foundation
 
+/// The accumulated parse state for one Claude Code JSONL transcript: running cost and token
+/// totals, the current and peak context size, the model in use, and the message ids already
+/// counted, so a re-read after an append never double counts.
 struct TranscriptState {
 
     /// The dialect this state folds. Set once when the state is created.

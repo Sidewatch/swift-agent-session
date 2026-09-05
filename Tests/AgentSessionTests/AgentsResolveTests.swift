@@ -2,15 +2,17 @@
 //  AgentsResolveTests.swift
 //  AgentSessionTests
 //
-//  `Agents.resolve(candidates:)` — the first candidate with a session wins, in
-//  the caller's order. The case behind it: Claude launched from a terminal whose
-//  cwd was a subfolder, so the transcript was keyed under that subfolder and a
-//  lookup of the opened folder alone found "No Agent Session".
+//  Tests for `Agents.resolve(candidates:)`: the first candidate with a session wins, and a
+//  terminal cwd deep inside the project still resolves to the opened root.
+//
+//  Created by David Sherlock on 9/2/26.
 //
 
 import XCTest
 @testable import AgentSession
 
+/// Tests for `Agents.resolve(candidates:)`: the first candidate with a session wins, and a
+/// terminal cwd deep inside the project still resolves to the opened root.
 final class AgentsResolveTests: XCTestCase {
 
     private var projectsRoot: URL!

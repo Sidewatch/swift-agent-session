@@ -11,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `GeminiAdapter` against both chat file shapes and the opaque project id it locates
+/// projects by.
 final class GeminiAdapterTests: XCTestCase {
 
     private var scratch: [URL] = []

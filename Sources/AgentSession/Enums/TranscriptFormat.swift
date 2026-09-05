@@ -2,6 +2,10 @@
 //  TranscriptFormat.swift
 //  AgentSession
 //
+//  Accumulated parse state for one Claude Code JSONL transcript.
+//
+//  Created by David Sherlock on 9/5/26.
+//
 
 import Foundation
 

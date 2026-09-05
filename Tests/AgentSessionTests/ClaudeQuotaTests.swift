@@ -10,6 +10,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `ClaudeQuota.parse` against the real `/api/oauth/usage` shape: windows, null
+/// windows, reset dates and extra usage.
 final class ClaudeQuotaTests: XCTestCase {
 
     /// The real /api/oauth/usage shape (from community reverse-engineering).

@@ -2,7 +2,8 @@
 //  QuotaDisplayTests.swift
 //  AgentSessionTests
 //
-//  Tests for Quota Display.
+//  Tests for the quota display helpers: each `ClaudeQuota.NamedWindow` key maps to its human
+//  label.
 //
 //  Created by David Sherlock on 9/5/26.
 //
@@ -10,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for the quota display helpers: each `ClaudeQuota.NamedWindow` key maps to its human
+/// label.
 final class QuotaDisplayTests: XCTestCase {
 
     private func named(_ key: String) -> ClaudeQuota.NamedWindow {

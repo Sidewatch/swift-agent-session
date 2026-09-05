@@ -2,7 +2,8 @@
 //  ClaudeCredentialsTests.swift
 //  AgentSessionTests
 //
-//  Tests for Claude Credentials.
+//  Tests for `ClaudeCredentials.accessToken(fromKeychainData:)` over the nested Claude Code
+//  shape, the flat shape, and malformed data.
 //
 //  Created by David Sherlock on 7/19/26.
 //
@@ -10,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `ClaudeCredentials.accessToken(fromKeychainData:)` over the nested Claude Code
+/// shape, the flat shape, and malformed data.
 final class ClaudeCredentialsTests: XCTestCase {
 
     private func data(_ s: String) -> Data { Data(s.utf8) }

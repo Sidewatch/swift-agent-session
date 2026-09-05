@@ -11,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `TranscriptCache`: incremental reads across polls, the zero-read unchanged fast
+/// path, and recovery when a transcript shrinks or rotates.
 final class TranscriptCacheTests: XCTestCase {
 
     // Every test runs against a throwaway projects container (the internal

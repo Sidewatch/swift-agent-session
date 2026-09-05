@@ -2,7 +2,8 @@
 //  BurnDetectorTests.swift
 //  AgentSessionTests
 //
-//  Tests for loop detection over a timeline.
+//  Tests for `BurnDetector`: the same command three times starts an episode, prose and prompts
+//  end it, and the verdicts (started, updated, ended, none) follow the timeline.
 //
 //  Created by David Sherlock on 9/5/26.
 //
@@ -10,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `BurnDetector`: the same command three times starts an episode, prose and prompts
+/// end it, and the verdicts (started, updated, ended, none) follow the timeline.
 final class BurnDetectorTests: XCTestCase {
 
     private func tool(_ command: String) -> TimelineEvent {

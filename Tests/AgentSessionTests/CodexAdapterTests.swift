@@ -11,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `CodexAdapter` against rollout fixtures built from the published schema: cwd
+/// matching, day folders, and event parsing.
 final class CodexAdapterTests: XCTestCase {
 
     private var scratch: [URL] = []

@@ -2,12 +2,17 @@
 //  AgentSessionTests.swift
 //  Tests for SwiftAgentSession
 //
+//  End-to-end tests for `ClaudeCodeAdapter` over a synthetic projects root: transcript location
+//  by encoded project path, event parsing, and session selection.
+//
 //  Created by David Sherlock on 7/9/26.
 //
 
 import XCTest
 @testable import AgentSession
 
+/// End-to-end tests for `ClaudeCodeAdapter` over a synthetic projects root: transcript location
+/// by encoded project path, event parsing, and session selection.
 final class AgentSessionTests: XCTestCase {
 
     // Every test runs against a throwaway projects container (the internal

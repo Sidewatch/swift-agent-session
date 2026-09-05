@@ -12,6 +12,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Exercises the parsing half of an adapter against a fixture file, with no live agent session
+/// and no project root, including the malformed lines that must be skipped.
 final class TranscriptFixtureTests: XCTestCase {
 
     private var scratch: [URL] = []

@@ -11,6 +11,8 @@
 import XCTest
 @testable import AgentSession
 
+/// Tests for `OpenCodeAdapter`, whose sessions are a directory tree of message files rather
+/// than one transcript.
 final class OpenCodeAdapterTests: XCTestCase {
 
     private var scratch: [URL] = []
