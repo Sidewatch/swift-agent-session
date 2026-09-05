@@ -2,7 +2,7 @@
 //  ClaudeCredentialsTests.swift
 //  AgentSessionTests
 //
-//  ClaudeCredentialsTests.
+//  Tests for Claude Credentials.
 //
 //  Created by David Sherlock on 7/19/26.
 //
