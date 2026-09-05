@@ -1,3 +1,13 @@
+//
+//  Data+Lines.swift
+//  AgentSession
+//
+//  The newline-terminated lines (without their terminators, empties dropped) and the
+//  unterminated tail that follows the last newline.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 extension Data {

@@ -1,3 +1,12 @@
+//
+//  FileHead.swift
+//  AgentSession
+//
+//  The first bytes of a file as text.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// The first bytes of a file as text. A transcript can grow to megabytes and the fact wanted

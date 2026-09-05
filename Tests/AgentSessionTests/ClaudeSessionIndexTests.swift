@@ -1,3 +1,13 @@
+//
+//  ClaudeSessionIndexTests.swift
+//  AgentSessionTests
+//
+//  Ported from Sidewatch's --dump-terminal-status: the session-id → directory link that makes
+//  "Needs you" attributable to a terminal.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import XCTest
 @testable import AgentSession
 

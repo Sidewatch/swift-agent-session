@@ -1,3 +1,12 @@
+//
+//  ClaudeSessionIndex.swift
+//  AgentSession
+//
+//  Resolves a Claude Code **session id** to the directory that session is running in.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// Resolves a Claude Code **session id** to the directory that session is running in.

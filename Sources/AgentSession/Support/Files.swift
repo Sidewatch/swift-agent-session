@@ -1,3 +1,12 @@
+//
+//  Files.swift
+//  AgentSession
+//
+//  Directory questions every adapter asks.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// Directory questions every adapter asks.

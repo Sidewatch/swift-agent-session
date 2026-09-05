@@ -1,3 +1,13 @@
+//
+//  ClaudeQuota.swift
+//  AgentSession
+//
+//  The current plan's rolling-window usage, as returned by Anthropic's internal
+//  `/api/oauth/usage` endpoint (undocumented — see `ClaudeUsageQuota` app-side).
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import Foundation
 
 /// The current plan's rolling-window usage, as returned by Anthropic's internal

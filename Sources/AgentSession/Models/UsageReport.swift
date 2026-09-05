@@ -1,3 +1,13 @@
+//
+//  UsageReport.swift
+//  AgentSession
+//
+//  A cross-session usage roll-up the dashboard renders — agent-neutral, so a future adapter
+//  (Codex, …) can produce the same shape.
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import Foundation
 
 /// A cross-session usage roll-up the dashboard renders — agent-neutral, so a future

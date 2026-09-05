@@ -1,3 +1,13 @@
+//
+//  ClaudeQuota+Display.swift
+//  AgentSession
+//
+//  The window's display name: `five_hour` is the 5-hour session, `seven_day` is Weekly, a per-
+//  model weekly cap is `Weekly · Model`, and an unknown key reads as its words.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 extension ClaudeQuota.NamedWindow {

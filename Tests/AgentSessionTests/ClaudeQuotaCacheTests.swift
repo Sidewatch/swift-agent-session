@@ -1,3 +1,12 @@
+//
+//  ClaudeQuotaCacheTests.swift
+//  AgentSessionTests
+//
+//  A call counter the fetch closures can share without capturing the test case.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import XCTest
 @testable import AgentSession
 

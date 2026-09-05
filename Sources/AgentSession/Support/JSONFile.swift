@@ -1,3 +1,12 @@
+//
+//  JSONFile.swift
+//  AgentSession
+//
+//  Reading JSON the way agent transcripts store it: whole-file objects and JSON Lines.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// Reading JSON the way agent transcripts store it: whole-file objects and JSON Lines.

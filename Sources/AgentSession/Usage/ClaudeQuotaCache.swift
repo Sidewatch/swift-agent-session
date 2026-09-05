@@ -1,3 +1,12 @@
+//
+//  ClaudeQuotaCache.swift
+//  AgentSession
+//
+//  A throttled, last-good-value cache in front of a quota fetch.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// A throttled, last-good-value cache in front of a quota fetch. Never re-fetches more often than

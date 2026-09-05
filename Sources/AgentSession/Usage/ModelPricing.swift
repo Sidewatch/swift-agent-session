@@ -1,3 +1,12 @@
+//
+//  ModelPricing.swift
+//  AgentSession
+//
+//  Approximate per-million-token USD list prices by model family.
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import Foundation
 
 /// Approximate per-million-token USD list prices by model family. Shared by the

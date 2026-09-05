@@ -1,3 +1,12 @@
+//
+//  ClaudeQuotaTests.swift
+//  AgentSessionTests
+//
+//  The real /api/oauth/usage shape (from community reverse-engineering).
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import XCTest
 @testable import AgentSession
 

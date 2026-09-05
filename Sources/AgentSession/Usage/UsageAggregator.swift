@@ -1,3 +1,13 @@
+//
+//  UsageAggregator.swift
+//  AgentSession
+//
+//  Rolls up token/cost usage across *every* Claude Code project transcript under
+//  `~/.claude/projects/*/*.jsonl` — the data behind the Usage tab's local half.
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import Foundation
 
 /// Rolls up token/cost usage across *every* Claude Code project transcript under

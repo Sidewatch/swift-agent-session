@@ -1,3 +1,13 @@
+//
+//  ClaudeCredentials.swift
+//  AgentSession
+//
+//  Extracts the Claude Code OAuth access token from the raw bytes of its macOS Keychain item
+//  (`Claude Code-credentials`).
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import Foundation
 
 /// Extracts the Claude Code OAuth access token from the raw bytes of its macOS

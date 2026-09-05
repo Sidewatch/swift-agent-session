@@ -1,3 +1,12 @@
+//
+//  ClockFormat.swift
+//  AgentSession
+//
+//  `HH:mm` in a fixed locale, once.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// `HH:mm` in a fixed locale, once. A `DateFormatter` with an explicit `dateFormat` still

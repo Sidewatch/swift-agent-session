@@ -1,3 +1,12 @@
+//
+//  FileStat.swift
+//  AgentSession
+//
+//  What a poll needs to know about a file without reading it: size, mtime, inode.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// What a poll needs to know about a file without reading it: size, mtime, inode.

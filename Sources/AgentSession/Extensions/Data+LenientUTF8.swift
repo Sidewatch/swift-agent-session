@@ -1,3 +1,12 @@
+//
+//  Data+LenientUTF8.swift
+//  AgentSession
+//
+//  The bytes as UTF-8, discarding a truncated final character rather than failing.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 extension Data {

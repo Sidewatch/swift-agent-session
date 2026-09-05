@@ -1,3 +1,12 @@
+//
+//  QuotaDisplayTests.swift
+//  AgentSessionTests
+//
+//  QuotaDisplayTests.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import XCTest
 @testable import AgentSession
 

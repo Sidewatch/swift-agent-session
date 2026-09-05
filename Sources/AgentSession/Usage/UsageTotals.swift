@@ -1,3 +1,12 @@
+//
+//  UsageTotals.swift
+//  AgentSession
+//
+//  The running sums a usage report is built from, fed one record at a time.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// The running sums a usage report is built from, fed one record at a time.

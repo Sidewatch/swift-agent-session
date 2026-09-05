@@ -1,3 +1,12 @@
+//
+//  UsageRecord.swift
+//  AgentSession
+//
+//  One usage-bearing transcript line: the model, the four token counts and when.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// One usage-bearing transcript line: the model, the four token counts and when.

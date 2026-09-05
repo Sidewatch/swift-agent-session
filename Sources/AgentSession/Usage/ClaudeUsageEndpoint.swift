@@ -1,3 +1,13 @@
+//
+//  ClaudeUsageEndpoint.swift
+//  AgentSession
+//
+//  Anthropic's **internal, undocumented** OAuth usage endpoint: the plan's remaining 5-hour /
+//  weekly quota, for a session token.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 
 /// Anthropic's **internal, undocumented** OAuth usage endpoint: the plan's remaining 5-hour /

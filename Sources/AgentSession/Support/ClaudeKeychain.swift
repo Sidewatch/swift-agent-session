@@ -1,3 +1,12 @@
+//
+//  ClaudeKeychain.swift
+//  AgentSession
+//
+//  Claude Code's OAuth credentials in the login Keychain.
+//
+//  Created by David Sherlock on 9/5/26.
+//
+
 import Foundation
 import Security
 

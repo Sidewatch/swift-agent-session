@@ -1,3 +1,13 @@
+//
+//  UsageStreaksTests.swift
+//  AgentSessionTests
+//
+//  Claude writes a response line more than once when a turn is retried; the same `message.id`
+//  must be counted once, or the bill doubles.
+//
+//  Created by David Sherlock on 7/19/26.
+//
+
 import XCTest
 @testable import AgentSession
 
