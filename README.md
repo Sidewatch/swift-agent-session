@@ -6,10 +6,11 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 
 - 🧭 **Agent-agnostic model** — `TimelineEvent`, `AgentUsage`, `AgentSummary`
 - 🔌 **Adapter protocol** — implement `AgentAdapter` once per agent
-- 🤖 **Claude Code adapter** — `ClaudeCodeAdapter` parses `~/.claude/projects/…/*.jsonl` transcripts
+- 📐 **Turn boundaries** — `TurnBoundary` splits the flat timeline into agent turns (one user prompt to just before the next), with a content-derived stable id so a checkpoint can be pinned to a turn
+- 🤖 **Claude Code adapter** — `ClaudeCodeAdapter` parses `~/.claude/projects/…/*.jsonl` transcripts. **The only adapter shipped.** Codex, Gemini CLI and OpenCode adapters existed until 11 Sep 2026 and were removed: their fixtures were written by hand from each tool's published schema and never run against a real session, and an adapter nobody can run reports "no session" forever without telling anyone. Recover them from git history, and only restore one with fixtures captured from a REAL run.
 - 🕘 **Activity timeline** — prompts, assistant prose, tool calls, and file edits, with local-clock `HH:MM` timestamps
 - 💰 **Telemetry** — context fill % (`AgentUsage.contextPercent`), output tokens, and estimated USD cost, deduplicated per API response
-- ✅ **Plan vs actual** — the files edited (Edit / Write / MultiEdit / NotebookEdit) and the current to-do list
+- ✅ **Plan vs actual** — the files edited (Edit / Write / MultiEdit / NotebookEdit). **`summary.todos` is currently always empty:** it parses Claude Code's `TodoWrite` tool, which was renamed to `TaskCreate`/`TaskUpdate`; across 63 real transcripts `TodoWrite` appears zero times. Fixable, and a good example of why anything keyed on another tool's vocabulary needs a test that fails when that vocabulary moves.
 - 🔎 **Auto-detection** — `Agents.active(for:)` picks the agent that owns a project
 - 🧪 **Fully tested** — synthetic-transcript tests including malformed, truncated, and garbage input
 - 🪶 **Zero dependencies** — Foundation only
