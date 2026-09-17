@@ -8,7 +8,7 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 
 ## Module map
 
-- `Adapters/` — the engine: adapters: Agents, ClaudeCodeAdapter, CodexAdapter, GeminiAdapter, OpenCodeAdapter
+- `Adapters/` — the engine: adapters: Agents, ClaudeCodeAdapter
 - `Models/` — value types — the shape of a thing, nothing else: AgentSummary, AgentUsage, ClaudeCredentials, ClaudeQuota, TimelineEvent, TurnBoundary, UsageReport
 - `Protocols/` — protocols the module exposes: AgentAdapter
 - `Transcripts/` — the engine: transcripts: SessionMemo, TranscriptCache, TranscriptState
@@ -17,3 +17,5 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 ## Rules
 
 Read `CONTRIBUTING.md` before changing anything: it is the layout and PR rulebook for this package.
+
+- **Auditing? Read `AUDIT.md` first** — what the last full audit checked and fixed, and the known non-issues to skip; extend it, do not redo it.

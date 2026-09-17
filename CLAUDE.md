@@ -8,7 +8,7 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 
 ## Module map
 
-- `Adapters/` — the engine: adapters: Agents, ClaudeCodeAdapter, CodexAdapter, GeminiAdapter, OpenCodeAdapter
+- `Adapters/` — the engine: adapters: Agents, ClaudeCodeAdapter
 - `Extensions/` — one extension per Foundation idiom: Int+CompactCount
 - `Monitoring/` — the engine: monitoring: BurnDetector (loop detection over a timeline)
 - `Models/` — value types — the shape of a thing, nothing else: AgentSummary, AgentUsage, ClaudeCredentials, ClaudeQuota, ClaudeQuota+Display, TimelineEvent, TurnBoundary, UsageReport
@@ -19,3 +19,5 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 ## Rules
 
 @CONTRIBUTING.md
+
+- **Auditing? Read `AUDIT.md` first** — what the last full audit checked and fixed, and the known non-issues to skip; extend it, do not redo it.

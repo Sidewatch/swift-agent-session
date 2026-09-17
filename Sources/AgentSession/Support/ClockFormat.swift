@@ -14,7 +14,7 @@ import Foundation
 /// adapter's rows would render differently from another's; `en_US_POSIX` pins it. Built
 /// once — DateFormatter is expensive.
 enum ClockFormat {
-    nonisolated(unsafe) static let hhmm: DateFormatter = {
+    static let hhmm: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = .current
