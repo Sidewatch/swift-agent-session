@@ -73,6 +73,10 @@ fails against the old code:
   never a limit row, `spend` / `extra_usage` become `Spend` (minor units, currency, exponent → "£12.34
   of £100.00"), and `seven_day_breakdown` becomes `weekShares`. Mutants: ignore `limits` → the
   limits test fails; drop the spend → the two spend tests fail; nothing else either way.
+- **Two stats added, not fixed:** `UsageReport.longestSession` (a transcript's first message instant to
+  its last — `UsageRecord.instant` is kept for it; a transcript with no timestamps still counts as a
+  session but has no span) and `mostActiveDay` (the local day with the most tokens, the earliest on a
+  tie). `UsageSessionStatsTests`; mutants shortest-for-longest and least-for-most fail only that test.
 
 ## Known non-issues (do not "fix" these again)
 
@@ -86,3 +90,4 @@ fails against the old code:
 - 18 Sep 2026 — logic review (every source and test file, line by line), Claude with David.
 - 18 Sep 2026 — `ModelPricing` by generation from the published page; `ClaudeQuota` reads the `limits` array,
   `spend` and `seven_day_breakdown` (see "Usage prices and plan limits" above).
+- 18 Sep 2026 — `UsageReport.longestSession` / `mostActiveDay`.

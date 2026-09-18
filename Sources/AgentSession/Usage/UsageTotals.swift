@@ -16,7 +16,9 @@ struct UsageTotals {
     private var byProject: [String: UsageAggregator.Bucketing] = [:]
     private var dailyCost: [String: Double] = [:]
     private var dailyTokens: [String: Int] = [:]
-    private var sessionFiles = Set<String>()
+    /// First and last message instant per transcript — a session's span is the distance between
+    /// them, the way Claude Code's own stats measure "longest session".
+    private var sessionSpans: [String: (first: Date, last: Date)] = [:]
     private var activeDays = Set<String>()
     private var hourCounts: [Int: Int] = [:]
     private var seenIDs = Set<String>()
@@ -27,7 +29,12 @@ struct UsageTotals {
         cost += r.cost; input += r.input; cacheWrite += r.cacheWrite; cacheRead += r.cacheRead; output += r.output; messages += 1
         byModel[UsageAggregator.displayModel(r.model), default: .init()].add(cost: r.cost, i: r.input, o: r.output, cr: r.cacheRead, cw: r.cacheWrite)
         byProject[project, default: .init()].add(cost: r.cost, i: r.input, o: r.output, cr: r.cacheRead, cw: r.cacheWrite)
-        sessionFiles.insert(file.path)
+        if let t = r.instant {
+            let span = sessionSpans[file.path] ?? (t, t)
+            sessionSpans[file.path] = (min(span.first, t), max(span.last, t))
+        } else if sessionSpans[file.path] == nil {
+            sessionSpans[file.path] = (.distantFuture, .distantPast)   // counted as a session, no span
+        }
         if !r.day.isEmpty {
             dailyCost[r.day, default: 0] += r.cost
             dailyTokens[r.day, default: 0] += r.tokens
@@ -43,8 +50,10 @@ struct UsageTotals {
             cacheReadTokens: cacheRead, cacheCreateTokens: cacheWrite, messageCount: messages,
             byModel: UsageAggregator.buckets(byModel), byProject: UsageAggregator.buckets(byProject),
             dailyCostUSD: dailyCost, windowDays: windowDays,
-            dailyTokens: dailyTokens, sessionCount: sessionFiles.count, activeDays: activeDays.count,
+            dailyTokens: dailyTokens, sessionCount: sessionSpans.count, activeDays: activeDays.count,
             currentStreak: current, longestStreak: longest,
-            peakHour: hourCounts.max { $0.value < $1.value }?.key)
+            peakHour: hourCounts.max { $0.value < $1.value }?.key,
+            longestSession: sessionSpans.values.map { $0.last.timeIntervalSince($0.first) }.filter { $0 >= 0 }.max(),
+            mostActiveDay: dailyTokens.max { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) }?.key)
     }
 }

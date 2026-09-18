@@ -15,6 +15,8 @@ struct UsageRecord {
     let model: String
     let day: String
     let localHour: Int?
+    /// The message's instant, when its timestamp parsed — what session lengths are measured from.
+    let instant: Date?
     let input: Int, cacheWrite: Int, cacheRead: Int, output: Int
 
     var tokens: Int { input + cacheWrite + cacheRead + output }
@@ -33,6 +35,7 @@ struct UsageRecord {
         // The raw-string fallbacks cover a timestamp the parser rejects.
         let ts = obj["timestamp"] as? String
         let instant = ts.flatMap(ISOTimestamp.date)
+        self.instant = instant
         day = instant.map(UsageAggregator.dayString) ?? ts.map { String($0.prefix(10)) } ?? ""
         localHour = instant.map { Calendar.current.component(.hour, from: $0) } ?? ts.flatMap(UsageRecord.localHour(fromISO:))
         input = usage["input_tokens"] as? Int ?? 0

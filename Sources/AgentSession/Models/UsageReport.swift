@@ -59,6 +59,11 @@ public struct UsageReport: Equatable, Sendable {
     public let longestStreak: Int
     /// The local hour (0–23) with the most activity, or nil when there's none.
     public let peakHour: Int?
+    /// The longest transcript's span in seconds, first message to last, or nil when no
+    /// message carried a timestamp.
+    public let longestSession: TimeInterval?
+    /// The `yyyy-MM-dd` local day with the most tokens (the earliest on a tie), or nil.
+    public let mostActiveDay: String?
 
     /// Total tokens across every category (in + out + cache read + cache create).
     public var totalTokens: Int { inputTokens + outputTokens + cacheReadTokens + cacheCreateTokens }
@@ -69,7 +74,8 @@ public struct UsageReport: Equatable, Sendable {
                 cacheCreateTokens: Int, messageCount: Int, byModel: [Bucket], byProject: [Bucket],
                 dailyCostUSD: [String: Double], windowDays: Int?,
                 dailyTokens: [String: Int] = [:], sessionCount: Int = 0, activeDays: Int = 0,
-                currentStreak: Int = 0, longestStreak: Int = 0, peakHour: Int? = nil) {
+                currentStreak: Int = 0, longestStreak: Int = 0, peakHour: Int? = nil,
+                longestSession: TimeInterval? = nil, mostActiveDay: String? = nil) {
         self.totalCostUSD = totalCostUSD
         self.inputTokens = inputTokens; self.outputTokens = outputTokens
         self.cacheReadTokens = cacheReadTokens; self.cacheCreateTokens = cacheCreateTokens
@@ -80,6 +86,8 @@ public struct UsageReport: Equatable, Sendable {
         self.sessionCount = sessionCount; self.activeDays = activeDays
         self.currentStreak = currentStreak; self.longestStreak = longestStreak
         self.peakHour = peakHour
+        self.longestSession = longestSession
+        self.mostActiveDay = mostActiveDay
     }
 
     public static let empty = UsageReport(totalCostUSD: 0, inputTokens: 0, outputTokens: 0,
