@@ -49,11 +49,34 @@ ignored), `ClaudeQuota.parse` and its microsecond dates, `ClaudeQuotaCache`'s th
 refresh still stamps `lastFetch`, so failures cannot hammer the endpoint), `ClaudeSessionIndex`'s
 per-UTF-16-unit fold and candidate encodings, `Agents.resolve`'s candidate order.
 
+### Usage prices and plan limits, later on 18 Sep 2026
+
+Two more fixes from comparing the dashboard with what Claude Code itself shows, each pinned by a test that
+fails against the old code:
+
+- **`ModelPricing` charged by family name only, and every family had moved.** The table was Opus 4.1 /
+  Sonnet 4 / Haiku 3.5 list prices, applied by substring: `claude-opus-5` (the most-used model in the
+  local transcripts) was charged $15/$75 where the published price is $5/$25 — three times over —
+  while `claude-fable-5-1` fell to the Sonnet default, $3/$15 against $10/$50, and Sonnet 5 and
+  Haiku 4.5 were off too. Rates now follow the generation read from the id (both id shapes, the 8-digit
+  date ignored), from platform.claude.com/docs/en/about-claude/pricing as read that day; an id with no
+  version keeps its family's older rates, which is also what keeps the fixture-based tests honest.
+  Mutant: every Opus at the 4.1 rates → `ModelPricingTests` fails, nothing else.
+- **`ClaudeQuota.parse` missed the Fable weekly cap and showed a codename bucket instead.** A live
+  response (`--dump-quota`, 18 Sep 2026) carries the per-model cap ONLY in a new `limits` array
+  (`kind: weekly_scoped`, `scope.model.display_name: "Fable"`, with a `severity`); the top-level
+  `seven_day_opus` / `seven_day_sonnet` keys are null and there is no `seven_day_fable` at all. The
+  shape-based sweep therefore rendered the 5-hour and weekly bars, an "Extra Usage" percentage and an
+  internal feature bucket by its codename — the one bar the user was about to hit absent. The `limits`
+  array is now the source of truth when present (keys `session`, `weekly_all`, `weekly_scoped:<Name>`;
+  the legacy accessors read them), the older shape still parses when it is absent, `extra_usage` is
+  never a limit row, `spend` / `extra_usage` become `Spend` (minor units, currency, exponent → "£12.34
+  of £100.00"), and `seven_day_breakdown` becomes `weekShares`. Mutants: ignore `limits` → the
+  limits test fails; drop the spend → the two spend tests fail; nothing else either way.
+
 ## Known non-issues (do not "fix" these again)
 
 - `ClaudeQuotaCache.lastValue` has no caller in Sidewatch — public API, kept on purpose.
-- `ModelPricing` prices a Fable model at the Sonnet rates (no list price recorded here yet); the app
-  labels every cost as approximate.
 - `TurnBoundary.id` collapses two turns opened by the same text within one clock minute — documented on
   the property; fixing it means a full-precision timestamp on `TimelineEvent`.
 
@@ -61,3 +84,5 @@ per-UTF-16-unit fold and candidate encodings, `Agents.resolve`'s candidate order
 
 - 17 Sep 2026 — full audit (app + all 20 libraries), Claude with David.
 - 18 Sep 2026 — logic review (every source and test file, line by line), Claude with David.
+- 18 Sep 2026 — `ModelPricing` by generation from the published page; `ClaudeQuota` reads the `limits` array,
+  `spend` and `seven_day_breakdown` (see "Usage prices and plan limits" above).

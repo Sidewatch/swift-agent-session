@@ -15,9 +15,13 @@ extension ClaudeQuota.NamedWindow {
     /// a per-model weekly cap is `Weekly · Model`, and an unknown key reads as its words.
     public var label: String {
         switch key {
-        case "five_hour": return "5-hour session"
+        case "five_hour", "session": return "5-hour session"
         case "seven_day": return "Weekly"
+        case "weekly_all": return "Weekly · all models"
         default:
+            if key.hasPrefix("weekly_scoped:") {
+                return "Weekly · \(key.dropFirst("weekly_scoped:".count))"
+            }
             if key.hasPrefix("seven_day_") {
                 return "Weekly · \(key.dropFirst("seven_day_".count).replacingOccurrences(of: "_", with: " ").capitalized)"
             }
@@ -37,5 +41,23 @@ extension ClaudeQuota.Window {
         if h >= 24 { return "resets in \(h / 24)d \(h % 24)h" }
         if h > 0 { return "resets in \(h)h \(m)m" }
         return "resets in \(m)m"
+    }
+}
+
+extension ClaudeQuota.Spend {
+    /// `£12.34 of £100.00` — both amounts in the account's currency. Formatted in a fixed
+    /// locale so GBP, USD and EUR read as `£`, `$`, `€` on every Mac.
+    public var summary: String { "\(formatted(usedMinor)) of \(formatted(limitMinor))" }
+
+    /// One amount in minor units as currency text.
+    public func formatted(_ minor: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = currency
+        f.locale = Locale(identifier: "en_US")
+        f.minimumFractionDigits = exponent
+        f.maximumFractionDigits = exponent
+        let value = Decimal(minor) / pow(Decimal(10), exponent)
+        return f.string(from: value as NSDecimalNumber) ?? "\(value) \(currency)"
     }
 }

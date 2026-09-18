@@ -80,7 +80,8 @@ struct MyAgentAdapter: AgentAdapter {
 
 - All calls are **synchronous** file reads over the newest transcript. When sessions may be large, dispatch them off the main queue.
 - Only the **latest session** (most recently modified `.jsonl`) per project is read.
-- Costs are **estimates** from approximate per-model list prices (Opus / Haiku / Sonnet-default tiers); repeated JSONL lines for the same API response are counted once.
+- Costs are **estimates** at Anthropic's published API list prices per model generation (`ModelPricing` cites the page and the date): Fable 5.1 and 5, Opus 4.5 and later against 4.1 and earlier, Sonnet 5 against 4.x, Haiku 4.5 against 3.5, at the 5-minute cache-write tier with no discounts. A subscription plan is not billed per token, so the figure is what the same tokens would cost at list. Repeated JSONL lines for the same API response are counted once.
+- `ClaudeQuota` reads both shapes of `/api/oauth/usage`: the `limits` array (Sep 2026 — where a per-model weekly cap such as Fable's lives, with the top-level `seven_day_<model>` keys null) and the older top-level windows. `spend` (or the older `extra_usage`) becomes `ClaudeQuota.Spend`, money in the account's own currency, and `seven_day_breakdown` becomes `weekShares`.
 - The parser is defensive: malformed, truncated, or garbage lines are skipped, never fatal.
 
 ## For agents

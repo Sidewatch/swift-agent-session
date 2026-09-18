@@ -25,6 +25,9 @@ final class QuotaDisplayTests: XCTestCase {
         XCTAssertEqual(named("seven_day_opus").label, "Weekly · Opus")
         XCTAssertEqual(named("seven_day_fable").label, "Weekly · Fable")
         XCTAssertEqual(named("some_new_cap").label, "Some New Cap")
+        XCTAssertEqual(named("session").label, "5-hour session")
+        XCTAssertEqual(named("weekly_all").label, "Weekly · all models")
+        XCTAssertEqual(named("weekly_scoped:Fable").label, "Weekly · Fable")
     }
 
     func testResetDescriptions() {
