@@ -210,8 +210,11 @@ struct TranscriptState {
             source = nil
         }
         guard let text = source else { return nil }
-        for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let t = raw.trimmingCharacters(in: .whitespaces)
+        // `isNewline`, never the Character "\n": a CRLF file keeps its endings in `new_string`,
+        // and "\r\n" is ONE Character in Swift, so a "\n" split never divided it — the anchor
+        // was the whole inserted text, which no single line can contain (18 Sep 2026).
+        for raw in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if t.count >= 4 { return String(t.prefix(200)) }
         }
         return nil
@@ -220,8 +223,9 @@ struct TranscriptState {
     /// The trimmed first line of `s`, truncated to `max` characters with an ellipsis.
     /// Internal (not private) so every adapter shares one truncation rule.
     static func firstLine(_ s: String, _ max: Int = 160) -> String {
-        let line = s.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? s
-        let t = line.trimmingCharacters(in: .whitespaces)
+        // `isNewline`: "\r\n" is one Character, so a "\n" split kept a CRLF prompt whole.
+        let line = s.split(maxSplits: 1, omittingEmptySubsequences: true, whereSeparator: \.isNewline).first.map(String.init) ?? s
+        let t = line.trimmingCharacters(in: .whitespacesAndNewlines)
         return t.count > max ? String(t.prefix(max)) + "…" : t
     }
 
@@ -231,27 +235,13 @@ struct TranscriptState {
         return parts.count <= 2 ? p : ".../" + parts.suffix(2).joined(separator: "/")
     }
 
-    /// ISO-8601 with fractional seconds ("2026-07-09T10:07:12.000Z") — the form
-    /// Claude Code writes. Falls back to `isoPlain` for whole-second timestamps.
-    // Apple documents ISO8601DateFormatter as safe for concurrent USE once configured; it
-    // is simply not annotated Sendable. Both of these are configured here and only ever
-    // read, so the assertion is about this usage, not the class in general.
-    private nonisolated(unsafe) static let isoFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    /// Whole-second ISO-8601 fallback ("2026-07-09T10:07:12Z").
-    private nonisolated(unsafe) static let isoPlain = ISO8601DateFormatter()
-
     /// Renders a `Date` as `HH:mm` on the viewer's local clock.
     /// Transcript timestamps are UTC Zulu — convert to the viewer's local clock,
     /// falling back to the raw UTC HH:MM slice only if the string is unparseable.
     /// Internal (not private) so every adapter shares one time-rendering rule.
     static func shortTime(_ iso: String?) -> String {
         guard let iso else { return "" }
-        if let date = isoFractional.date(from: iso) ?? isoPlain.date(from: iso) {
+        if let date = ISOTimestamp.date(iso) {
             return ClockFormat.hhmm(date)
         }
         guard let tPart = iso.split(separator: "T").dropFirst().first else { return "" }

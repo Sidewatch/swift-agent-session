@@ -57,6 +57,30 @@ final class UsageStreaksTests: XCTestCase {
     }
 }
 
+/// The heatmap and the streaks bucket by LOCAL calendar day. `UsageRecord` used to take the
+/// day from the first ten characters of the UTC timestamp, so for anyone west of UTC every
+/// evening's work landed on tomorrow's cell and the current streak read 0 until the next day.
+final class UsageLocalDayTests: XCTestCase {
+    func testUsageIsBucketedByTheLocalCalendarDay() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("usage-day-\(UUID().uuidString)")
+        let proj = root.appendingPathComponent("-Users-x-dev-app")
+        try FileManager.default.createDirectory(at: proj, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // 23:30 UTC is the next calendar day anywhere east of UTC (Europe/London in summer
+        // included) and the same day west of it; the expected key is derived through the same
+        // local-zone formatter, so the test states the rule rather than one zone's answer.
+        let iso = "2026-09-05T23:30:00Z"
+        let instant = try XCTUnwrap(ISO8601DateFormatter().date(from: iso))
+        let local = DateFormatter()
+        local.locale = Locale(identifier: "en_US_POSIX"); local.timeZone = .current; local.dateFormat = "yyyy-MM-dd"
+        let line = #"{"timestamp":"\#(iso)","requestId":"req-1","message":{"id":"msg-1","model":"claude-sonnet-4-5","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}"#
+        try (line + "\n").write(to: proj.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
+        let report = UsageAggregator.report(projectsRoot: root)
+        XCTAssertEqual(Array(report.dailyCostUSD.keys), [local.string(from: instant)])
+        XCTAssertEqual(report.peakHour, Calendar.current.component(.hour, from: instant))
+    }
+}
+
 /// Pins that a response line Claude wrote twice (a retried turn, same `message.id`) is counted
 /// once in the usage report.
 final class UsageReportDedupeTests: XCTestCase {

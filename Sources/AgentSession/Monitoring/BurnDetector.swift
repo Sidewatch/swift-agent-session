@@ -59,8 +59,8 @@ public struct BurnDetector: Sendable, Equatable {
     /// whose scripted commands all began with the same `cd …; python3 - <<'EOF'` line and
     /// differed entirely below it. Three different commands are not a loop.
     public static func key(for event: TimelineEvent) -> (key: String, label: String)? {
-        let line = event.detail.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? event.detail
-        let label = line.trimmingCharacters(in: .whitespaces)
+        let line = event.detail.split(maxSplits: 1, omittingEmptySubsequences: true, whereSeparator: \.isNewline).first.map(String.init) ?? event.detail
+        let label = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !label.isEmpty else { return nil }
         let whole = event.detail.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ").prefix(2000)
         return ("\(event.title)|\(whole)", label)

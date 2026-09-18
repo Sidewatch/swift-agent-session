@@ -13,7 +13,8 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 - `Monitoring/` — the engine: monitoring: BurnDetector (loop detection over a timeline)
 - `Models/` — value types — the shape of a thing, nothing else: AgentSummary, AgentUsage, ClaudeCredentials, ClaudeQuota, ClaudeQuota+Display, TimelineEvent, TurnBoundary, UsageReport
 - `Protocols/` — protocols the module exposes: AgentAdapter
-- `Transcripts/` — the engine: transcripts: SessionMemo, TranscriptCache, TranscriptState
+- `Support/` — pure helpers: ClaudeKeychain, ClaudeSessionIndex, ClockFormat, Files, FileStat, ISOTimestamp, JSONFile
+- `Transcripts/` — the engine: transcripts: TranscriptCache, TranscriptState
 - `Usage/` — the engine: usage: ClaudeQuotaCache, ClaudeUsageEndpoint, ModelPricing, UsageAggregator, UsageRecord, UsageTotals
 
 ## Rules

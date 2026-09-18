@@ -192,6 +192,21 @@ final class AgentSessionTests: XCTestCase {
         XCTAssertEqual(adapter.summary(for: root)?.editedFiles, ["/proj/analysis.ipynb"])
     }
 
+    // A CRLF file keeps its line endings in the edit's `new_string`, and in Swift "\r\n" is ONE
+    // Character — so a `split(separator: "\n")` never divided it: the anchor was the whole
+    // inserted text, which no single line of the file can contain, and Follow Agent fell back
+    // to the first hunk. The same split clipped a CRLF prompt to nothing.
+    func testCRLFEditAnchorAndPromptTakeTheirFirstLine() throws {
+        try write("""
+        {"type":"user","timestamp":"2026-07-09T10:07:12.000Z","message":{"content":"first line\\r\\nsecond line"}}
+        {"type":"assistant","timestamp":"2026-07-09T10:08:00.000Z","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/proj/Win.cs","old_string":"x","new_string":"line one\\r\\nline two\\r\\n"}}]}}
+        """)
+        let events = adapter.events(for: root)
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].detail, "first line")
+        XCTAssertEqual(events[1].anchor, "line one")
+    }
+
     // MARK: - Telemetry
 
     func testUsageAggregation() {

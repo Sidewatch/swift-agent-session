@@ -11,7 +11,8 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 - `Adapters/` — the engine: adapters: Agents, ClaudeCodeAdapter
 - `Models/` — value types — the shape of a thing, nothing else: AgentSummary, AgentUsage, ClaudeCredentials, ClaudeQuota, TimelineEvent, TurnBoundary, UsageReport
 - `Protocols/` — protocols the module exposes: AgentAdapter
-- `Transcripts/` — the engine: transcripts: SessionMemo, TranscriptCache, TranscriptState
+- `Support/` — pure helpers: ClaudeKeychain, ClaudeSessionIndex, ClockFormat, Files, FileStat, ISOTimestamp, JSONFile
+- `Transcripts/` — the engine: transcripts: TranscriptCache, TranscriptState
 - `Usage/` — the engine: usage: ClaudeQuotaCache, ClaudeUsageEndpoint, ModelPricing, UsageAggregator, UsageRecord, UsageTotals
 
 ## Rules

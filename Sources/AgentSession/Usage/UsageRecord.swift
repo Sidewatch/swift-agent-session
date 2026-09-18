@@ -27,16 +27,22 @@ struct UsageRecord {
               let usage = msg["usage"] as? [String: Any] else { return nil }
         id = (msg["id"] as? String) ?? (obj["requestId"] as? String)
         model = (msg["model"] as? String).flatMap { $0.isEmpty || $0 == "<synthetic>" ? nil : $0 } ?? "unknown"
+        // The LOCAL calendar day and hour. The day used to be the timestamp's first ten
+        // characters — its UTC date — so for anyone west of UTC every evening's work landed on
+        // tomorrow's heatmap cell and the current streak read 0 until the next day (18 Sep 2026).
+        // The raw-string fallbacks cover a timestamp the parser rejects.
         let ts = obj["timestamp"] as? String
-        day = ts.map { String($0.prefix(10)) } ?? ""            // ISO8601: the day is its first 10 chars
-        localHour = ts.flatMap(UsageRecord.localHour(fromISO:))
+        let instant = ts.flatMap(ISOTimestamp.date)
+        day = instant.map(UsageAggregator.dayString) ?? ts.map { String($0.prefix(10)) } ?? ""
+        localHour = instant.map { Calendar.current.component(.hour, from: $0) } ?? ts.flatMap(UsageRecord.localHour(fromISO:))
         input = usage["input_tokens"] as? Int ?? 0
         cacheWrite = usage["cache_creation_input_tokens"] as? Int ?? 0
         cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
         output = usage["output_tokens"] as? Int ?? 0
     }
 
-    /// The local hour of an ISO timestamp, from its UTC hour (chars 11–12) and the current offset.
+    /// The local hour of an ISO timestamp the parser rejected, from its UTC hour (chars 11–12)
+    /// and the current offset — the fallback behind the parsed instant above.
     static func localHour(fromISO ts: String) -> Int? {
         guard ts.count >= 13, let utcHour = Int(ts.dropFirst(11).prefix(2)) else { return nil }
         let offset = TimeZone.current.secondsFromGMT() / 3600
