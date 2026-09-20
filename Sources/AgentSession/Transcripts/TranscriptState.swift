@@ -105,6 +105,17 @@ struct TranscriptState {
             if let s = msg["content"] as? String, !s.hasPrefix("<") {
                 append(TimelineEvent(kind: .userPrompt, title: "You", detail: Self.firstLine(s), filePath: nil, timestamp: ts))
             } else if let arr = msg["content"] as? [[String: Any]] {
+                // Tool results ride back on a user message: attach each to its call by id.
+                for block in arr where (block["type"] as? String) == "tool_result" {
+                    guard let id = block["tool_use_id"] as? String,
+                          let index = events.lastIndex(where: { $0.toolUseID == id }) else { continue }
+                    let text: String
+                    if let s = block["content"] as? String { text = s }
+                    else if let parts = block["content"] as? [[String: Any]] { text = parts.compactMap { $0["text"] as? String }.joined(separator: "\n") }
+                    else { text = "" }
+                    events[index].result = text.count > TimelineEvent.resultCap ? "…" + String(text.suffix(TimelineEvent.resultCap)) : text
+                    events[index].resultIsError = (block["is_error"] as? Bool) ?? false
+                }
                 let texts = arr.filter { ($0["type"] as? String) == "text" }.compactMap { $0["text"] as? String }
                 if !texts.isEmpty {
                     append(TimelineEvent(kind: .userPrompt, title: "You", detail: Self.firstLine(texts.joined(separator: " ")), filePath: nil, timestamp: ts))

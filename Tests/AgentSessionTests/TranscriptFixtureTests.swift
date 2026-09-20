@@ -92,6 +92,29 @@ final class TranscriptFixtureTests: XCTestCase {
         XCTAssertGreaterThan(ModelPricing.cost(model: "claude-opus-5", input: 1000, cacheWrite: 200, cacheRead: 300, output: 50), 0)
     }
 
+    /// A tool's result attaches to its call by id — string or block content — kept to its last
+    /// characters; an error flag rides with it; a result for an unknown id is ignored.
+    func testToolResultsAttachToTheirCalls() throws {
+        let long = String(repeating: "x", count: 7000) + "Executed 3 tests, with 0 failures"
+        let file = try fixture([
+            #"{"type":"user","timestamp":"2026-09-21T10:00:00.000Z","message":{"content":"Run the tests"}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-21T10:00:04.000Z","message":{"content":[{"type":"tool_use","id":"tu_a","name":"Bash","input":{"command":"swift test"}}]}}"#,
+            #"{"type":"user","timestamp":"2026-09-21T10:00:09.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"tu_a","content":"LONG"}]}}"#.replacingOccurrences(of: "LONG", with: long),
+            #"{"type":"assistant","timestamp":"2026-09-21T10:00:12.000Z","message":{"content":[{"type":"tool_use","id":"tu_b","name":"Bash","input":{"command":"npm test"}}]}}"#,
+            #"{"type":"user","timestamp":"2026-09-21T10:00:20.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"tu_b","is_error":true,"content":[{"type":"text","text":"Tests: 1 failed, 4 passed, 5 total"},{"type":"text","text":"exit 1"}]},{"type":"tool_result","tool_use_id":"nope","content":"lost"}]}}"#,
+            #"{"type":"user","timestamp":"2026-09-21T10:05:00.000Z","message":{"content":[{"type":"text","text":"Fix it"}]}}"#,
+        ])
+        let events = ClaudeCodeAdapter().events(fromSession: file)
+        let calls = events.filter { $0.kind == .toolUse }
+        XCTAssertEqual(calls.count, 2)
+        XCTAssertEqual(calls[0].result?.count, 1 + TimelineEvent.resultCap, "kept to the cap, with an ellipsis")
+        XCTAssertTrue(calls[0].result?.hasSuffix("Executed 3 tests, with 0 failures") == true, "the END survives")
+        XCTAssertFalse(calls[0].resultIsError)
+        XCTAssertEqual(calls[1].result, "Tests: 1 failed, 4 passed, 5 total\nexit 1", "block content joins")
+        XCTAssertTrue(calls[1].resultIsError)
+        XCTAssertEqual(events.filter { $0.kind == .userPrompt }.count, 2, "a message that is only tool results is not a prompt")
+    }
+
     func testParsesATranscriptFileWithNoLiveSession() throws {
         let file = try fixture(twoTurns)
         let events = ClaudeCodeAdapter().events(fromSession: file)

@@ -82,6 +82,14 @@ public struct TimelineEvent: Equatable, Sendable {
     }
     public let todos: [TodoItem]?
 
+    /// For a tool call, what the tool returned — the `tool_result` block matched by
+    /// `toolUseID`, kept to its LAST `resultCap` characters (a test runner's summary is at the
+    /// end) — and whether the tool reported an error. Set after the call's event, when the
+    /// result arrives in the next user message.
+    public var result: String?
+    public var resultIsError: Bool = false
+    public static let resultCap = 6_000
+
     /// Creates a timeline entry.
     public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String, anchor: String? = nil, command: String? = nil,
                 usage: Usage? = nil, model: String? = nil, toolUseID: String? = nil, todos: [TodoItem]? = nil) {
