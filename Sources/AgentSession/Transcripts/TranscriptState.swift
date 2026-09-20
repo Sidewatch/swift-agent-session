@@ -111,25 +111,50 @@ struct TranscriptState {
                 }
             }
         } else if type == "assistant", let arr = msg["content"] as? [[String: Any]] {
+            // The message's bill rides on its FIRST event only — one model call, one charge —
+            // and a replayed message (same id) carries none, like `ingestUsage`.
+            let messageModel = (msg["model"] as? String).flatMap { $0.isEmpty || $0 == "<synthetic>" ? nil : $0 }
+            var pendingUsage: TimelineEvent.Usage? = nil
+            if let u = msg["usage"] as? [String: Any] {
+                let id = (msg["id"] as? String) ?? (obj["requestId"] as? String)
+                if id.map({ !billedMessageIDs.contains($0) }) ?? true {
+                    if let id { billedMessageIDs.insert(id) }
+                    pendingUsage = TimelineEvent.Usage(input: u["input_tokens"] as? Int ?? 0, cacheWrite: u["cache_creation_input_tokens"] as? Int ?? 0,
+                                                       cacheRead: u["cache_read_input_tokens"] as? Int ?? 0, output: u["output_tokens"] as? Int ?? 0)
+                }
+            }
+            func bill() -> TimelineEvent.Usage? { defer { pendingUsage = nil }; return pendingUsage }
             for block in arr {
                 switch block["type"] as? String {
                 case "text":
                     if let t = (block["text"] as? String)?.trimmed, !t.isEmpty {
-                        append(TimelineEvent(kind: .assistantText, title: "Claude", detail: Self.firstLine(t), filePath: nil, timestamp: ts))
+                        append(TimelineEvent(kind: .assistantText, title: "Claude", detail: Self.firstLine(t), filePath: nil, timestamp: ts,
+                                             usage: bill(), model: messageModel))
                     }
                 case "tool_use":
                     let name = block["name"] as? String ?? "tool"
                     let input = block["input"] as? [String: Any] ?? [:]
                     let (detail, path) = Self.toolDetail(input)
                     let isEdit = Self.editTools.contains(name)
+                    var todos: [TimelineEvent.TodoItem]? = nil
+                    if name == "TodoWrite", let ts = input["todos"] as? [Any] {
+                        todos = ts.compactMap { item in
+                            guard let t = item as? [String: Any], let c = t["content"] as? String else { return nil }
+                            return TimelineEvent.TodoItem(content: c, status: (t["status"] as? String) ?? "pending")
+                        }
+                    }
                     append(TimelineEvent(kind: isEdit ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts,
                                          anchor: isEdit ? Self.editAnchor(input) : nil,
-                                         command: isEdit ? nil : (input["command"] as? String)))
+                                         command: isEdit ? nil : (input["command"] as? String),
+                                         usage: bill(), model: messageModel, toolUseID: block["id"] as? String, todos: todos))
                 default: break
                 }
             }
         }
     }
+
+    /// Message ids whose usage already rode on an event, so a replayed line is not billed twice.
+    private var billedMessageIDs = Set<String>()
 
     /// Appends one event and trims the buffer to the cap.
     private mutating func append(_ event: TimelineEvent) {

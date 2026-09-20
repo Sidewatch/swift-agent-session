@@ -60,8 +60,31 @@ public struct TimelineEvent: Equatable, Sendable {
     /// it. Nil for every other entry.
     public let command: String?
 
+    /// The tokens one assistant MESSAGE reported, attached to the first event that message
+    /// produced (a message is one model call; its text and tool blocks share the bill).
+    public struct Usage: Equatable, Sendable {
+        public let input: Int, cacheWrite: Int, cacheRead: Int, output: Int
+        public init(input: Int, cacheWrite: Int, cacheRead: Int, output: Int) {
+            self.input = input; self.cacheWrite = cacheWrite; self.cacheRead = cacheRead; self.output = output
+        }
+    }
+    /// The usage and the model of the message this event came from; nil for the message's
+    /// later events and for user prompts. Summing a turn's events gives the turn's bill.
+    public let usage: Usage?
+    public let model: String?
+    /// The agent's tool-call id (`tool_use.id`), so a later `tool_result` can be matched to it.
+    public let toolUseID: String?
+    /// A `TodoWrite`: the plan as the agent wrote it, item content and status.
+    public struct TodoItem: Equatable, Sendable {
+        public let content: String
+        public let status: String
+        public init(content: String, status: String) { self.content = content; self.status = status }
+    }
+    public let todos: [TodoItem]?
+
     /// Creates a timeline entry.
-    public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String, anchor: String? = nil, command: String? = nil) {
+    public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String, anchor: String? = nil, command: String? = nil,
+                usage: Usage? = nil, model: String? = nil, toolUseID: String? = nil, todos: [TodoItem]? = nil) {
         self.kind = kind
         self.title = title
         self.detail = detail
@@ -69,5 +92,9 @@ public struct TimelineEvent: Equatable, Sendable {
         self.timestamp = timestamp
         self.anchor = anchor
         self.command = command
+        self.usage = usage
+        self.model = model
+        self.toolUseID = toolUseID
+        self.todos = todos
     }
 }

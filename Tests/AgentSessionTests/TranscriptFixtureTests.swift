@@ -65,6 +65,33 @@ final class TranscriptFixtureTests: XCTestCase {
         XCTAssertNil(tools[3].command, "a search is not a command")
     }
 
+    /// A message's usage and model ride on its FIRST event only; a replayed message (same id)
+    /// bills nothing; a TodoWrite carries its items; a tool call carries its id.
+    func testUsageModelTodosAndToolIDsRideOnEvents() throws {
+        let file = try fixture([
+            #"{"type":"user","timestamp":"2026-09-20T10:00:00.000Z","message":{"content":"Plan it"}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-20T10:00:04.000Z","message":{"id":"m1","model":"claude-opus-5","usage":{"input_tokens":1000,"cache_creation_input_tokens":200,"cache_read_input_tokens":300,"output_tokens":50},"content":[{"type":"text","text":"On it."},{"type":"tool_use","id":"tu_1","name":"TodoWrite","input":{"todos":[{"content":"Read the schema","status":"completed"},{"content":"Write the migration","status":"in_progress"},{"content":"Run tests","status":"pending"}]}}]}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-20T10:00:04.000Z","message":{"id":"m1","model":"claude-opus-5","usage":{"input_tokens":1000,"cache_creation_input_tokens":200,"cache_read_input_tokens":300,"output_tokens":50},"content":[{"type":"text","text":"On it."}]}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-20T10:00:09.000Z","message":{"id":"m2","model":"claude-sonnet-5","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"tool_use","id":"tu_2","name":"Bash","input":{"command":"swift test"}}]}}"#,
+        ])
+        let events = ClaudeCodeAdapter().events(fromSession: file)
+        XCTAssertEqual(events.count, 5)
+        XCTAssertEqual(events[1].usage, TimelineEvent.Usage(input: 1000, cacheWrite: 200, cacheRead: 300, output: 50), "the message's first event carries the bill")
+        XCTAssertEqual(events[1].model, "claude-opus-5")
+        XCTAssertNil(events[2].usage, "the same message's second event carries none")
+        XCTAssertEqual(events[2].model, "claude-opus-5", "but still says which model")
+        XCTAssertEqual(events[2].todos, [TimelineEvent.TodoItem(content: "Read the schema", status: "completed"),
+                                         TimelineEvent.TodoItem(content: "Write the migration", status: "in_progress"),
+                                         TimelineEvent.TodoItem(content: "Run tests", status: "pending")])
+        XCTAssertEqual(events[2].toolUseID, "tu_1")
+        XCTAssertNil(events[3].usage, "a replayed message is not billed twice")
+        XCTAssertEqual(events[4].usage?.output, 5)
+        XCTAssertEqual(events[4].model, "claude-sonnet-5")
+        XCTAssertEqual(events[4].toolUseID, "tu_2")
+        XCTAssertNil(events[0].usage); XCTAssertNil(events[0].todos)
+        XCTAssertGreaterThan(ModelPricing.cost(model: "claude-opus-5", input: 1000, cacheWrite: 200, cacheRead: 300, output: 50), 0)
+    }
+
     func testParsesATranscriptFileWithNoLiveSession() throws {
         let file = try fixture(twoTurns)
         let events = ClaudeCodeAdapter().events(fromSession: file)

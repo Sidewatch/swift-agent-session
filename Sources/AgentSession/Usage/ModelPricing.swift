@@ -23,7 +23,7 @@ import Foundation
 /// points — Opus and Haiku at 4.5, Sonnet at 5, Fable's cache read at 5.1 — and an id with no
 /// version at all is charged its family's older rates, the only honest reading of a string that
 /// says nothing about which one it is.
-enum ModelPricing {
+public enum ModelPricing {
     struct Rates: Equatable { let input, cacheWrite, cacheRead, output: Double }
 
     static func rates(for model: String) -> Rates {
@@ -62,7 +62,7 @@ enum ModelPricing {
     }
 
     /// USD cost of one message's token usage under `model`'s rates.
-    static func cost(model: String, input: Int, cacheWrite: Int, cacheRead: Int, output: Int) -> Double {
+    public static func cost(model: String, input: Int, cacheWrite: Int, cacheRead: Int, output: Int) -> Double {
         let r = rates(for: model)
         return Double(input) / 1e6 * r.input
              + Double(cacheWrite) / 1e6 * r.cacheWrite
