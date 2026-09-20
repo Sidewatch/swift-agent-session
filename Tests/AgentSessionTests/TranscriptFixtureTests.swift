@@ -43,6 +43,28 @@ final class TranscriptFixtureTests: XCTestCase {
         #"{"type":"assistant","timestamp":"2026-07-25T10:05:06.000Z","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"Up.swift","new_string":"min(30, d)"}}]}}"#,
     ]
 
+    /// A shell tool call keeps its WHOLE command on the event: a heredoc's body, a `&&` chain,
+    /// everything past the 120 characters the feed's `detail` shows. Other tools carry none.
+    func testShellCommandIsKeptWhole() throws {
+        let long = String(repeating: "x", count: 300)
+        let file = try fixture([
+            #"{"type":"user","timestamp":"2026-09-20T10:00:00.000Z","message":{"content":"Wipe the users"}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-20T10:00:04.000Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"psql \"$DATABASE_URL\" <<'SQL'\nDELETE FROM users;\nSQL"}}]}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-20T10:00:05.000Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"echo LONG"}}]}}"#.replacingOccurrences(of: "LONG", with: long),
+            #"{"type":"assistant","timestamp":"2026-09-20T10:00:06.000Z","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"a.sql","new_string":"DELETE FROM users;"}}]}}"#,
+            #"{"type":"assistant","timestamp":"2026-09-20T10:00:07.000Z","message":{"content":[{"type":"tool_use","name":"Grep","input":{"pattern":"DELETE"}}]}}"#,
+        ])
+        let events = ClaudeCodeAdapter().events(fromSession: file)
+        let tools = events.filter { $0.kind == .toolUse || $0.kind == .fileEdit }
+        XCTAssertEqual(tools.count, 4)
+        XCTAssertEqual(tools[0].command, "psql \"$DATABASE_URL\" <<'SQL'\nDELETE FROM users;\nSQL", "the heredoc body is part of the command")
+        XCTAssertEqual(tools[0].detail, "psql \"$DATABASE_URL\" <<'SQL'", "the feed's detail is still the first line")
+        XCTAssertEqual(tools[1].command?.count, 5 + 300, "nothing is truncated")
+        XCTAssertLessThan(tools[1].detail.count, 130, "the feed's detail is still capped")
+        XCTAssertNil(tools[2].command, "an edit is not a command")
+        XCTAssertNil(tools[3].command, "a search is not a command")
+    }
+
     func testParsesATranscriptFileWithNoLiveSession() throws {
         let file = try fixture(twoTurns)
         let events = ClaudeCodeAdapter().events(fromSession: file)

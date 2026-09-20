@@ -123,7 +123,8 @@ struct TranscriptState {
                     let (detail, path) = Self.toolDetail(input)
                     let isEdit = Self.editTools.contains(name)
                     append(TimelineEvent(kind: isEdit ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts,
-                                         anchor: isEdit ? Self.editAnchor(input) : nil))
+                                         anchor: isEdit ? Self.editAnchor(input) : nil,
+                                         command: isEdit ? nil : (input["command"] as? String)))
                 default: break
                 }
             }

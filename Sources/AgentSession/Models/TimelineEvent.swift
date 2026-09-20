@@ -54,13 +54,20 @@ public struct TimelineEvent: Equatable, Sendable {
     /// edit, not the file's first diff hunk). Nil for whole-file writes and non-edits.
     public let anchor: String?
 
+    /// For a shell tool call, the WHOLE command as the agent ran it — every line of a heredoc,
+    /// every `&&` link. `detail` keeps its first 120 characters for the feed; a review surface
+    /// that classifies what the agent ran (a `psql -c "DELETE …"` two lines down) needs all of
+    /// it. Nil for every other entry.
+    public let command: String?
+
     /// Creates a timeline entry.
-    public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String, anchor: String? = nil) {
+    public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String, anchor: String? = nil, command: String? = nil) {
         self.kind = kind
         self.title = title
         self.detail = detail
         self.filePath = filePath
         self.timestamp = timestamp
         self.anchor = anchor
+        self.command = command
     }
 }
