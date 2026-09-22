@@ -7,6 +7,7 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 - 🧭 **Agent-agnostic model** — `TimelineEvent`, `AgentUsage`, `AgentSummary`
 - 🔌 **Adapter protocol** — implement `AgentAdapter` once per agent
 - 📐 **Turn boundaries** — `TurnBoundary` splits the flat timeline into agent turns (one user prompt to just before the next), with a content-derived stable id so a checkpoint can be pinned to a turn
+- 📊 **Turn effort and plan** — `turn.effort(in:)` is a `TurnEffort`: the tool calls the turn made, the model that answered, and the cost summed from the messages' own usage at `ModelPricing`'s list prices (with `modelLabel` "opus 5" and `costLabel` "$0.42" for a row); `turn.plan(in:)` is the turn's last `TodoWrite` in the agent's own words
 - 🤖 **Claude Code adapter** — `ClaudeCodeAdapter` parses `~/.claude/projects/…/*.jsonl` transcripts. **The only adapter shipped.** Codex, Gemini CLI and OpenCode adapters existed until 11 Sep 2026 and were removed: their fixtures were written by hand from each tool's published schema and never run against a real session, and an adapter nobody can run reports "no session" forever without telling anyone. Recover them from git history, and only restore one with fixtures captured from a REAL run.
 - 🕘 **Activity timeline** — prompts, assistant prose, tool calls, and file edits, with local-clock `HH:MM` timestamps
 - 💰 **Telemetry** — context fill % (`AgentUsage.contextPercent`), output tokens, and estimated USD cost, deduplicated per API response
@@ -58,6 +59,14 @@ if let agent = Agents.active(for: root) {
     if let summary = agent.summary(for: root) {
         print("edited \(summary.editedFiles.count) files")
         for todo in summary.todos { print("[\(todo.status)] \(todo.text)") }
+    }
+
+    // Per turn: what it edited, what it cost, what it planned.
+    let events = agent.events(for: root)
+    for turn in TurnBoundary.turns(in: events) {
+        let effort = turn.effort(in: events)
+        print(turn.prompt, turn.editedFiles(in: events).count, effort.toolCalls, effort.modelLabel ?? "-", effort.costLabel ?? "-")
+        for item in turn.plan(in: events) { print("[\(item.status)] \(item.content)") }
     }
 }
 ```

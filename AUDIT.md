@@ -101,3 +101,4 @@ fails against the old code:
   `spend` and `seven_day_breakdown` (see "Usage prices and plan limits" above).
 - 18 Sep 2026 — `UsageReport.longestSession` / `mostActiveDay`.
 - 18 Sep 2026 — `ClaudeKeychain` reads through the `security` tool first (no prompt); framework read as fallback.
+- 22 Sep 2026 — `TurnEffort` and `TurnBoundary.effort(in:)` / `plan(in:)` moved in from Sidewatch's `AgentTurnNode` (the outline row keeps only its drawing); `TurnEffortTests`. AGENTS.md re-mirrored from CLAUDE.md (it had drifted: Extensions, Monitoring and ClaudeQuota+Display were missing).
