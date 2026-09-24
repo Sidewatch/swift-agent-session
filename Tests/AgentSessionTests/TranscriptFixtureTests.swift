@@ -80,15 +80,12 @@ final class TranscriptFixtureTests: XCTestCase {
         XCTAssertEqual(events[1].model, "claude-opus-5")
         XCTAssertNil(events[2].usage, "the same message's second event carries none")
         XCTAssertEqual(events[2].model, "claude-opus-5", "but still says which model")
-        XCTAssertEqual(events[2].todos, [TimelineEvent.TodoItem(content: "Read the schema", status: "completed"),
-                                         TimelineEvent.TodoItem(content: "Write the migration", status: "in_progress"),
-                                         TimelineEvent.TodoItem(content: "Run tests", status: "pending")])
         XCTAssertEqual(events[2].toolUseID, "tu_1")
         XCTAssertNil(events[3].usage, "a replayed message is not billed twice")
         XCTAssertEqual(events[4].usage?.output, 5)
         XCTAssertEqual(events[4].model, "claude-sonnet-5")
         XCTAssertEqual(events[4].toolUseID, "tu_2")
-        XCTAssertNil(events[0].usage); XCTAssertNil(events[0].todos)
+        XCTAssertNil(events[0].usage)
         XCTAssertGreaterThan(ModelPricing.cost(model: "claude-opus-5", input: 1000, cacheWrite: 200, cacheRead: 300, output: 50), 0)
     }
 

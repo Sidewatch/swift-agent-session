@@ -2,8 +2,8 @@
 //  TurnEffortTests.swift
 //  Tests for SwiftAgentSession
 //
-//  Tests for a turn's effort and plan: tool calls counted, the last model kept, the cost summed
-//  at the messages' own usage, the final TodoWrite as the plan, and the row labels.
+//  Tests for a turn's effort: tool calls counted, the last model kept, the cost summed at the
+//  messages' own usage, and the row labels.
 //
 //  Created by David Sherlock on 9/22/26.
 //
@@ -11,13 +11,13 @@
 import XCTest
 @testable import AgentSession
 
-/// Tests for `TurnBoundary.effort(in:)`, `TurnBoundary.plan(in:)` and `TurnEffort`'s labels.
+/// Tests for `TurnBoundary.effort(in:)` and `TurnEffort`'s labels.
 final class TurnEffortTests: XCTestCase {
 
     private func event(_ kind: TimelineEvent.Kind, _ detail: String = "", usage: TimelineEvent.Usage? = nil,
-                       model: String? = nil, todos: [TimelineEvent.TodoItem]? = nil) -> TimelineEvent {
+                       model: String? = nil) -> TimelineEvent {
         TimelineEvent(kind: kind, title: "t", detail: detail, filePath: nil, timestamp: "10:00",
-                      usage: usage, model: model, todos: todos)
+                      usage: usage, model: model)
     }
 
     private let usage = TimelineEvent.Usage(input: 4000, cacheWrite: 0, cacheRead: 12000, output: 300)
@@ -55,28 +55,10 @@ final class TurnEffortTests: XCTestCase {
         XCTAssertEqual(effort.model, "claude-haiku-4-5-20251001")
     }
 
-    func testATurnOutsideTheTimelineHasNoEffortAndNoPlan() {
+    func testATurnOutsideTheTimelineHasNoEffort() {
         let stale = TurnBoundary(start: 5, end: 9, prompt: "gone", timestamp: "")
         XCTAssertEqual(stale.effort(in: [event(.userPrompt)]), .none)
-        XCTAssertEqual(stale.plan(in: [event(.userPrompt)]), [])
         XCTAssertEqual(TurnEffort.none.toolCalls, 0)
-    }
-
-    func testPlanIsTheTurnsLastTodoWriteInTheAgentsWords() {
-        let early = [TimelineEvent.TodoItem(content: "Reset the dev database", status: "pending")]
-        let late = [TimelineEvent.TodoItem(content: "Reset the dev database", status: "completed"),
-                    TimelineEvent.TodoItem(content: "Run the tests", status: "in_progress")]
-        let events = [
-            event(.userPrompt, "plan it"),
-            event(.toolUse, "TodoWrite", todos: early),
-            event(.toolUse, "TodoWrite", todos: late),
-            event(.toolUse, "swift test"),
-            event(.userPrompt, "and now?"),
-            event(.toolUse, "ls"),
-        ]
-        let turns = TurnBoundary.turns(in: events)
-        XCTAssertEqual(turns[0].plan(in: events), late, "the FINAL write, not the first")
-        XCTAssertEqual(turns[1].plan(in: events), [], "a turn that wrote no plan has none")
     }
 
     func testModelIdsReadAsFamilyAndVersion() {

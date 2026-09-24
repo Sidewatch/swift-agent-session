@@ -74,13 +74,6 @@ public struct TimelineEvent: Equatable, Sendable {
     public let model: String?
     /// The agent's tool-call id (`tool_use.id`), so a later `tool_result` can be matched to it.
     public let toolUseID: String?
-    /// A `TodoWrite`: the plan as the agent wrote it, item content and status.
-    public struct TodoItem: Equatable, Sendable {
-        public let content: String
-        public let status: String
-        public init(content: String, status: String) { self.content = content; self.status = status }
-    }
-    public let todos: [TodoItem]?
 
     /// For a tool call, what the tool returned — the `tool_result` block matched by
     /// `toolUseID`, kept to its LAST `resultCap` characters (a test runner's summary is at the
@@ -92,7 +85,7 @@ public struct TimelineEvent: Equatable, Sendable {
 
     /// Creates a timeline entry.
     public init(kind: Kind, title: String, detail: String, filePath: String?, timestamp: String, anchor: String? = nil, command: String? = nil,
-                usage: Usage? = nil, model: String? = nil, toolUseID: String? = nil, todos: [TodoItem]? = nil) {
+                usage: Usage? = nil, model: String? = nil, toolUseID: String? = nil) {
         self.kind = kind
         self.title = title
         self.detail = detail
@@ -103,6 +96,5 @@ public struct TimelineEvent: Equatable, Sendable {
         self.usage = usage
         self.model = model
         self.toolUseID = toolUseID
-        self.todos = todos
     }
 }

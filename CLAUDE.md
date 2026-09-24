@@ -9,7 +9,6 @@ A tiny, dependency-free reader for terminal AI coding-agent session transcripts.
 ## Module map
 
 - `Adapters/` — the engine: adapters: Agents, ClaudeCodeAdapter
-- `Extensions/` — one extension per Foundation idiom: Int+CompactCount; and TurnBoundary+Facts (`effort(in:)`, `plan(in:)` — the facts a turn's own events carry beyond `editedFiles`)
 - `Monitoring/` — the engine: monitoring: BurnDetector (loop detection over a timeline)
 - `Models/` — value types — the shape of a thing, nothing else: AgentSummary, AgentUsage, ClaudeCredentials, ClaudeQuota, ClaudeQuota+Display, TimelineEvent, TurnBoundary, TurnEffort (+Display: `modelLabel`, `costLabel`, `shortModel`), UsageReport
 - `Protocols/` — protocols the module exposes: AgentAdapter

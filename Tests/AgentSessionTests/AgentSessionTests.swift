@@ -305,7 +305,6 @@ final class AgentSessionTests: XCTestCase {
         XCTAssertNil(adapter.usage(for: root))          // …but has no telemetry
         let s = try XCTUnwrap(adapter.summary(for: root))
         XCTAssertTrue(s.editedFiles.isEmpty)
-        XCTAssertTrue(s.todos.isEmpty)
     }
 
     // A truncated final line (agent killed mid-write) must be skipped.
@@ -408,33 +407,24 @@ final class AgentSessionTests: XCTestCase {
         XCTAssertEqual(events[0].detail, "")
     }
 
-    // MARK: - Plan vs actual
+    // MARK: - Edits
 
-    func testSummaryCollectsEditsAndTodos() {
+    func testSummaryCollectsEdits() {
         let summary = adapter.summary(for: root)
         XCTAssertNotNil(summary)
         guard let s = summary else { return }
-
         XCTAssertEqual(s.editedFiles, ["/Users/foo/proj/Sources/App.swift"])
-
-        XCTAssertEqual(s.todos.count, 2)
-        XCTAssertEqual(s.todos[0].text, "Write tests")
-        XCTAssertEqual(s.todos[0].status, "in_progress")
-        XCTAssertEqual(s.todos[1].text, "Ship it")
-        XCTAssertEqual(s.todos[1].status, "pending")
     }
 
-    // Todos with missing/mistyped fields: content is required, status defaults.
-    func testSummaryWithMalformedTodos() throws {
+    // A tool call with no file path records no edit; a to-do tool (not offered on current
+    // models — Claude Code 2.1.233) is just a tool call now, never a plan.
+    func testSummaryIgnoresMalformedEditsAndOldPlanTools() throws {
         try write("""
-        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"Good"},{"status":"pending"},{"content":42},"bare-string"]}}]}}
-        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":"not-an-array"}}]}}
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"Good"},{"status":"pending"}]}}]}}
         {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"no_file_path":true}}]}}
         """)
         let s = try XCTUnwrap(adapter.summary(for: root))
-        XCTAssertEqual(s.todos.count, 1)
-        XCTAssertEqual(s.todos[0].text, "Good")
-        XCTAssertEqual(s.todos[0].status, "pending")    // missing status defaults
         XCTAssertTrue(s.editedFiles.isEmpty)            // Edit without a path records nothing
+        XCTAssertEqual(adapter.events(for: root).map(\.title), ["TodoWrite", "Edit"], "both are plain tool calls")
     }
 }

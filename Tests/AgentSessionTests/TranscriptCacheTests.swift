@@ -113,8 +113,6 @@ final class TranscriptCacheTests: XCTestCase {
         let cs = cached.summary(for: root), os = oracle.summary(for: root)
         XCTAssertEqual(cs == nil, os == nil, "summary nil-ness diverged", file: file, line: line)
         XCTAssertEqual(cs?.editedFiles, os?.editedFiles, file: file, line: line)
-        XCTAssertEqual(cs?.todos.map { "\($0.text)|\($0.status)" },
-                       os?.todos.map { "\($0.text)|\($0.status)" }, file: file, line: line)
     }
 
     // MARK: - Incremental parity

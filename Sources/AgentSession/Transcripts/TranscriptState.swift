@@ -57,8 +57,6 @@ struct TranscriptState {
     /// Absolute paths of every file an edit tool wrote to.
     private var edited = Set<String>()
 
-    /// The most recent `TodoWrite` list, as `(text, status)` pairs (last wins).
-    private var todos: [(String, String)] = []
 
     // MARK: - Ingestion
 
@@ -113,7 +111,9 @@ struct TranscriptState {
                     if let s = block["content"] as? String { text = s }
                     else if let parts = block["content"] as? [[String: Any]] { text = parts.compactMap { $0["text"] as? String }.joined(separator: "\n") }
                     else { text = "" }
-                    events[index].result = text.count > TimelineEvent.resultCap ? "…" + String(text.suffix(TimelineEvent.resultCap)) : text
+                    // A spilled result is read back from its file (its END is what a summary reader wants).
+                    let resolved = PersistedOutput.resolved(text, cap: TimelineEvent.resultCap)
+                    events[index].result = resolved.count > TimelineEvent.resultCap ? "…" + String(resolved.suffix(TimelineEvent.resultCap)) : resolved
                     events[index].resultIsError = (block["is_error"] as? Bool) ?? false
                 }
                 let texts = arr.filter { ($0["type"] as? String) == "text" }.compactMap { $0["text"] as? String }
@@ -147,17 +147,10 @@ struct TranscriptState {
                     let input = block["input"] as? [String: Any] ?? [:]
                     let (detail, path) = Self.toolDetail(input)
                     let isEdit = Self.editTools.contains(name)
-                    var todos: [TimelineEvent.TodoItem]? = nil
-                    if name == "TodoWrite", let ts = input["todos"] as? [Any] {
-                        todos = ts.compactMap { item in
-                            guard let t = item as? [String: Any], let c = t["content"] as? String else { return nil }
-                            return TimelineEvent.TodoItem(content: c, status: (t["status"] as? String) ?? "pending")
-                        }
-                    }
                     append(TimelineEvent(kind: isEdit ? .fileEdit : .toolUse, title: name, detail: detail, filePath: path, timestamp: ts,
                                          anchor: isEdit ? Self.editAnchor(input) : nil,
                                          command: isEdit ? nil : (input["command"] as? String),
-                                         usage: bill(), model: messageModel, toolUseID: block["id"] as? String, todos: todos))
+                                         usage: bill(), model: messageModel, toolUseID: block["id"] as? String))
                 default: break
                 }
             }
@@ -173,7 +166,7 @@ struct TranscriptState {
         if events.count > Self.eventCap { events.removeFirst(events.count - Self.eventCap) }
     }
 
-    /// Updates the edited-files set and the current to-do list from one line.
+    /// Updates the edited-files set from one line.
     private mutating func ingestSummary(_ obj: [String: Any]) {
         guard obj["type"] as? String == "assistant",
               let msg = obj["message"] as? [String: Any],
@@ -184,15 +177,6 @@ struct TranscriptState {
             // NotebookEdit's parameter is notebook_path, not file_path.
             if Self.editTools.contains(name),
                let fp = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) { edited.insert(fp) }
-            // Tolerate a heterogeneous todos array: one malformed element must
-            // not drop the valid ones (cast per element, not the whole array).
-            if name == "TodoWrite", let ts = input["todos"] as? [Any] {
-                todos = ts.compactMap { item in
-                    guard let t = item as? [String: Any],
-                          let c = t["content"] as? String else { return nil }
-                    return (c, (t["status"] as? String) ?? "pending")
-                }
-            }
         }
     }
 
@@ -211,7 +195,7 @@ struct TranscriptState {
     var eventsResult: [TimelineEvent] { Array(events.suffix(Self.eventCap)) }
 
     /// The edited-files / to-dos roll-up as the public API reports it.
-    var summaryResult: AgentSummary { AgentSummary(editedFiles: edited, todos: todos) }
+    var summaryResult: AgentSummary { AgentSummary(editedFiles: edited) }
 
     // MARK: - Static helpers (shared parsing vocabulary)
 

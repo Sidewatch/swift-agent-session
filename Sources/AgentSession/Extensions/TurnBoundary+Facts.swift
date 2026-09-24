@@ -34,12 +34,4 @@ extension TurnBoundary {
         return TurnEffort(toolCalls: calls, model: model, cost: cost)
     }
 
-    /// The plan as the turn last wrote it: the final `TodoWrite`'s items, in the agent's own
-    /// words with the status it gave each. Empty when the turn wrote none.
-    ///
-    /// - Parameter events: The timeline the turn indexes into.
-    public func plan(in events: [TimelineEvent]) -> [TimelineEvent.TodoItem] {
-        guard start <= end, events.indices.contains(start), events.indices.contains(end) else { return [] }
-        return events[start...end].last { $0.todos != nil }?.todos ?? []
-    }
 }
