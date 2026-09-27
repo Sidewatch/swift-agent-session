@@ -1,3 +1,7 @@
+> **This package has moved.** It is now the `AgentSession` module of [swift-agent-kit](https://github.com/Sidewatch/swift-agent-kit), with its full
+> history. Depend on `.package(url: "https://github.com/Sidewatch/swift-agent-kit.git", from: "0.1.0")` and the `AgentSession` product;
+> `import AgentSession` is unchanged. This repository is archived.
+
 # Swift Agent Session
 
 A tiny, dependency-free reader for terminal AI coding-agent session transcripts. It maps an agent's on-disk session onto one agent-agnostic model — an activity timeline, token/cost telemetry, and an edited-files/to-dos roll-up — so review surfaces stay identical across agents. Read-only: it never talks to a model, keeps no account, and sends no telemetry.
